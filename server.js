@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-//  관상 판독기 로컬 서버
+//  운명 판독기 로컬 서버
 //  - http://localhost:5173        : PC에서 사용
 //  - https://<PC의 IP>:5443       : 같은 와이파이의 휴대폰에서 사용 (카메라는 HTTPS 필수)
 //  사용법: node server.js [HTTP포트] [HTTPS포트] [--open]   (--open: 준비되면 브라우저 열기)
@@ -117,12 +117,12 @@ function openBrowser(url) {
   try { spawn(cmd, cmdArgs, { stdio: 'ignore', detached: true }).unref(); } catch { /* 무시 */ }
 }
 http.createServer(handler).listen(HTTP_PORT, '0.0.0.0', () => {
-  console.log('\n  관상 판독기 실행 중  (끄려면 이 창을 닫거나 Ctrl+C)');
+  console.log('\n  운명 판독기 실행 중  (끄려면 이 창을 닫거나 Ctrl+C)');
   console.log(`  PC       : http://localhost:${HTTP_PORT}`);
   if (OPEN) openBrowser(`http://localhost:${HTTP_PORT}/`);
 }).on('error', (e) => {
   if (e.code === 'EADDRINUSE') {
-    console.error(`\n  ${HTTP_PORT}번 포트를 이미 쓰고 있습니다. 관상 판독기가 이미 켜져 있을 수 있습니다: http://localhost:${HTTP_PORT}`);
+    console.error(`\n  ${HTTP_PORT}번 포트를 이미 쓰고 있습니다. 운명 판독기가 이미 켜져 있을 수 있습니다: http://localhost:${HTTP_PORT}`);
     if (OPEN) openBrowser(`http://localhost:${HTTP_PORT}/`);
   } else {
     console.error(e.message);

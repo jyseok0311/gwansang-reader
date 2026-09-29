@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title 관상 판독기
+title 운명 판독기
 cd /d "%~dp0"
 where node >nul 2>nul
 if errorlevel 1 (

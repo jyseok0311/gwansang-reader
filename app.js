@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-//  관상 판독기 — 메인 앱
+//  운명 판독기 — 메인 앱
 //  카메라 → MediaPipe Face Landmarker(478점) → 자세 보정·비율 측정 → 관상 해석
 //  PC와 휴대폰(안드로이드·아이폰) 모두 지원
 // ─────────────────────────────────────────────────────────────
@@ -11,6 +11,7 @@ import { interpretPalm } from './palm-reading.js';
 import { fuse } from './fusion.js';
 import * as V from './views-combo.js';
 import { wrapLines, roundRect } from './util.js';
+import { createEmbers } from './embers.js';
 
 // ── 엔진 경로: 로컬(vendor/) 우선, 없으면 CDN ────────────────
 const MP_VERSION = '0.10.14';
@@ -34,6 +35,7 @@ const CAMERA_DIAG_FOV = IS_MOBILE ? 80 : 72;
 
 // ── DOM ──────────────────────────────────────────────────────
 const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
 const views = {
   camera: $('#view-camera'), analyzing: $('#view-analyzing'), result: $('#view-result'),
   hub: $('#view-hub'), sajuform: $('#view-sajuform'), saju: $('#view-saju'), palm: $('#view-palm'), combo: $('#view-combo'),
@@ -95,6 +97,15 @@ function setEngineStatus(text, cls = '') {
   el.className = 'engine-status ' + cls;
 }
 
+// 떠오르는 불씨(첫 화면·종합 결과에서만) + 빛 번짐(단계를 마쳤을 때 한 번)
+const embers = createEmbers($('#embers'), { count: matchMedia('(max-width: 600px)').matches ? 16 : 26 });
+function bloom() {
+  const b = $('#bloom');
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  b.classList.remove('on'); void b.offsetWidth; b.classList.add('on');
+  b.addEventListener('animationend', () => b.classList.remove('on'), { once: true });
+}
+
 // 화면 전환 + 뒤로 가기 버튼 지원
 function show(name, { history: mode = 'push' } = {}) {
   const prev = current;
@@ -103,6 +114,7 @@ function show(name, { history: mode = 'push' } = {}) {
   document.body.dataset.bar = BAR_VIEWS.has(name) ? '1' : '';
   Object.entries(views).forEach(([k, el]) => el.classList.toggle('hidden', k !== name));
   document.body.classList.toggle('cam-open', name === 'camera');
+  embers.set(name === 'hub' || name === 'combo');
   if (mode === 'push' && prev !== name) history.pushState({ view: name }, '');
   else if (mode === 'replace') history.replaceState({ view: name }, '');
   window.scrollTo({ top: 0, behavior: BAR_VIEWS.has(name) ? 'auto' : 'smooth' });
@@ -110,6 +122,7 @@ function show(name, { history: mode = 'push' } = {}) {
 }
 history.replaceState({ view: 'hub' }, '');
 document.body.dataset.view = 'hub';
+embers.set(true);
 window.addEventListener('popstate', (e) => {
   let v = e.state?.view || 'hub';
   if (v === 'analyzing' || (v === 'result' && !lastResult)) v = 'hub';
@@ -529,7 +542,7 @@ function drawMesh(ctx, pts, ok) {
   const lw = Math.max(1, ctx.canvas.width / 640);
   ctx.save();
   ctx.lineWidth = lw;
-  ctx.strokeStyle = ok ? 'rgba(212,175,55,0.28)' : 'rgba(255,120,90,0.25)';
+  ctx.strokeStyle = ok ? 'rgba(255,178,77,0.28)' : 'rgba(255,120,90,0.25)';
   strokeConnections(ctx, pts, F.FACE_LANDMARKS_TESSELATION);
   ctx.lineWidth = lw * 1.6;
   ctx.strokeStyle = ok ? 'rgba(111,211,154,0.9)' : 'rgba(255,143,107,0.85)';
@@ -838,7 +851,7 @@ function drawResultOverlay(ctx, pts, color) {
   const w = ctx.canvas.width;
   ctx.save();
   ctx.lineWidth = Math.max(1.2, w / 500);
-  ctx.strokeStyle = 'rgba(212,175,55,0.9)';
+  ctx.strokeStyle = 'rgba(255,178,77,0.9)';
   strokeConnections(ctx, pts, F.FACE_LANDMARKS_FACE_OVAL);
   ctx.strokeStyle = 'rgba(255,255,255,0.6)';
   for (const set of [F.FACE_LANDMARKS_LEFT_EYE, F.FACE_LANDMARKS_RIGHT_EYE, F.FACE_LANDMARKS_LEFT_EYEBROW, F.FACE_LANDMARKS_RIGHT_EYEBROW, F.FACE_LANDMARKS_LIPS]) {
@@ -885,23 +898,23 @@ async function drawCard() {
   const H = PAD + 150 + PH + 60 + 70 + descLines.length * 44 + 50 + r.fortune.ranked.length * 86 + 90;
   c.width = W; c.height = H;
 
-  ctx.fillStyle = '#0d1220'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#05060a'; ctx.fillRect(0, 0, W, H);
   const g = ctx.createRadialGradient(W / 2, 0, 50, W / 2, 0, W);
-  g.addColorStop(0, 'rgba(212,175,55,0.18)'); g.addColorStop(1, 'rgba(212,175,55,0)');
+  g.addColorStop(0, 'rgba(255,178,77,0.18)'); g.addColorStop(1, 'rgba(255,178,77,0)');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#d4af37'; ctx.font = `900 58px ${serif}`;
+  ctx.fillStyle = '#ffb24d'; ctx.font = `900 58px ${serif}`;
   ctx.fillText('관상 판독 결과', W / 2, PAD + 52);
   ctx.fillStyle = '#e7e2d4'; ctx.font = `500 30px ${sans}`;
   ctx.fillText(`${sh.char} ${sh.name} · ${t.name}`, W / 2, PAD + 108);
 
   const px = (W - PW) / 2, py = PAD + 150;
   ctx.save(); roundRect(ctx, px, py, PW, PH, 28); ctx.clip(); ctx.drawImage(photo, px, py, PW, PH); ctx.restore();
-  ctx.strokeStyle = 'rgba(212,175,55,0.7)'; ctx.lineWidth = 3; roundRect(ctx, px, py, PW, PH, 28); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,178,77,0.7)'; ctx.lineWidth = 3; roundRect(ctx, px, py, PW, PH, 28); ctx.stroke();
 
   let y = py + PH + 80;
-  ctx.fillStyle = '#f1d67a'; ctx.font = `900 44px ${serif}`;
+  ctx.fillStyle = '#ffd08a'; ctx.font = `900 44px ${serif}`;
   ctx.fillText(`종합 ${r.fortune.avg}점 · ${gradeLabel(r.fortune.avg)}`, W / 2, y);
   y += 60;
   ctx.textAlign = 'left'; ctx.fillStyle = '#c8cbd6'; ctx.font = `28px ${sans}`;
@@ -910,13 +923,13 @@ async function drawCard() {
   for (const f of r.fortune.ranked) {
     ctx.fillStyle = '#f4efe3'; ctx.font = `700 30px ${sans}`; ctx.textAlign = 'left';
     ctx.fillText(`${f.icon} ${f.name}`, PAD, y + 30);
-    ctx.textAlign = 'right'; ctx.fillStyle = '#f1d67a'; ctx.fillText(`${f.score}  ${f.level}`, W - PAD, y + 30);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#ffd08a'; ctx.fillText(`${f.score}  ${f.level}`, W - PAD, y + 30);
     ctx.fillStyle = 'rgba(255,255,255,0.1)'; roundRect(ctx, PAD, y + 48, IW, 14, 7); ctx.fill();
-    ctx.fillStyle = '#d4af37'; roundRect(ctx, PAD, y + 48, IW * f.score / 100, 14, 7); ctx.fill();
+    ctx.fillStyle = '#ffb24d'; roundRect(ctx, PAD, y + 48, IW * f.score / 100, 14, 7); ctx.fill();
     y += 86;
   }
   ctx.textAlign = 'center'; ctx.fillStyle = '#7f8698'; ctx.font = `22px ${sans}`;
-  ctx.fillText('관상 판독기 · 오락용 결과이며 과학적 근거가 없습니다.', W / 2, H - 40);
+  ctx.fillText('운명 판독기 · 오락용 결과이며 과학적 근거가 없습니다.', W / 2, H - 40);
   return c;
 }
 
@@ -1085,7 +1098,9 @@ function sajuSummary(st) {
 }
 function renderHub() {
   const done = { saju: !!combo.saju, face: !!combo.face, palm: !!combo.palm };
+  let fresh = false;
   for (const k of ['saju', 'face', 'palm']) {
+    if (done[k] && !$(`#step-${k}`).classList.contains('done')) fresh = true;
     $(`#step-${k}`).classList.toggle('done', done[k]);
     $(`#hub-${k}-view`).classList.toggle('hidden', !done[k]);
   }
@@ -1096,6 +1111,9 @@ function renderHub() {
   $('#hub-palm-status').textContent = combo.palm ? `✓ ${combo.palm.reading.shape.primary.name} · ${combo.palm.analysis.quality.level === 'poor' ? '사진이 흐림' : '선을 찾았어요'}` : '';
   $('#hub-palm-cam').textContent = combo.palm ? '📷 다시 촬영' : '📷 촬영';
   const n = Object.values(done).filter(Boolean).length;
+  $$('#hub-pips i').forEach((el, i) => el.classList.toggle('on', i < n));
+  $('#hub-pips').setAttribute('aria-label', `완료한 단계 ${n}/3`);
+  if (fresh && current === 'hub') bloom();
   $('#hub-go').disabled = n < 2;
   $('#hub-hint').textContent = n < 2 ? `두 가지 이상 완료하면 종합 결과를 볼 수 있습니다. (${n}/3 완료)`
     : n === 2 ? '한 가지를 더 하면 더 정확해지지만, 지금도 종합 결과를 볼 수 있습니다.' : '세 가지를 모두 완료했습니다!';

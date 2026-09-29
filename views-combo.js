@@ -111,7 +111,7 @@ export function drawPalmOverlay(canvas, src, palm) {
     ctx.setLineDash([]); ctx.font = `700 ${Math.max(12, canvas.width / 34)}px "Noto Sans KR", sans-serif`;
     const label = LINE_NAME[key] + (faint ? '(희미)' : ''), tw = ctx.measureText(label).width + 12, th = Math.max(20, canvas.width / 26);
     const lx = clampN(a.x - tw / 2, 4, canvas.width - tw - 4), ly = clampN(a.y - th - 8, 4, canvas.height - th - 4);
-    ctx.fillStyle = 'rgba(13,18,32,.8)'; roundRect(ctx, lx, ly, tw, th, th / 2); ctx.fill();
+    ctx.fillStyle = 'rgba(5,6,10,.8)'; roundRect(ctx, lx, ly, tw, th, th / 2); ctx.fill();
     ctx.fillStyle = LINE_COLOR[key]; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(label, lx + 6, ly + th / 2 + 1);
   }
 }
@@ -194,12 +194,12 @@ export async function drawComboCard(f, c, palmCanvas) {
   // 위에서부터 쌓이는 높이: 제목, 사주 글자, 세 오행, 종합 점수, 손바닥 사진, 요약 글, 다섯 운 막대, 맨 아래 안내
   const H = PAD + 150 + (hasSaju ? 300 : 0) + 200 + 150 + (hasPalm ? PH + 40 : 0) + lead.length * 44 + 40 + f.ranked.length * 100 + 90;
   cv.width = W; cv.height = H;
-  ctx.fillStyle = '#0d1220'; ctx.fillRect(0, 0, W, H);
-  const g = ctx.createRadialGradient(W / 2, 0, 50, W / 2, 0, W); g.addColorStop(0, 'rgba(212,175,55,0.2)'); g.addColorStop(1, 'rgba(212,175,55,0)');
+  ctx.fillStyle = '#05060a'; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(W / 2, 0, 50, W / 2, 0, W); g.addColorStop(0, 'rgba(255,178,77,0.2)'); g.addColorStop(1, 'rgba(255,178,77,0)');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 
   let y = PAD;
-  ctx.textAlign = 'center'; ctx.fillStyle = '#d4af37'; ctx.font = `900 54px ${serif}`;
+  ctx.textAlign = 'center'; ctx.fillStyle = '#ffb24d'; ctx.font = `900 54px ${serif}`;
   ctx.fillText('관상 · 손금 · 사주 종합', W / 2, y + 50);
   ctx.fillStyle = '#c8cbd6'; ctx.font = `500 26px ${sans}`;
   ctx.fillText(f.sources.map(k => SRC[k]).join(' + ') + ' 종합 결과', W / 2, y + 98);
@@ -211,7 +211,7 @@ export async function drawComboCard(f, c, palmCanvas) {
     cols.forEach(([p, lab], i) => {
       const x = x0 + i * (cw + gap);
       ctx.fillStyle = 'rgba(255,255,255,0.05)'; roundRect(ctx, x, y, cw, 270, 22); ctx.fill();
-      if (lab === '日') { ctx.strokeStyle = 'rgba(212,175,55,0.8)'; ctx.lineWidth = 3; roundRect(ctx, x, y, cw, 270, 22); ctx.stroke(); }
+      if (lab === '日') { ctx.strokeStyle = 'rgba(255,178,77,0.8)'; ctx.lineWidth = 3; roundRect(ctx, x, y, cw, 270, 22); ctx.stroke(); }
       ctx.fillStyle = '#9aa1b4'; ctx.font = `500 24px ${sans}`; ctx.textAlign = 'center'; ctx.fillText(lab, x + cw / 2, y + 36);
       if (!p) { ctx.fillStyle = '#6f7689'; ctx.font = `700 60px ${serif}`; ctx.fillText('?', x + cw / 2, y + 160); return; }
       [[STEMS[p.stem], 50], [BRANCHES[p.branch], 150]].forEach(([it, oy]) => {
@@ -233,13 +233,13 @@ export async function drawComboCard(f, c, palmCanvas) {
   });
   y += 200;
   // 종합 점수
-  ctx.textAlign = 'center'; ctx.fillStyle = '#f1d67a'; ctx.font = `900 96px ${serif}`; ctx.fillText(`${f.avg}점`, W / 2, y + 60);
+  ctx.textAlign = 'center'; ctx.fillStyle = '#ffd08a'; ctx.font = `900 96px ${serif}`; ctx.fillText(`${f.avg}점`, W / 2, y + 60);
   ctx.fillStyle = '#e7e2d4'; ctx.font = `700 34px ${serif}`; ctx.fillText(f.grade, W / 2, y + 112);
   y += 150;
   if (hasPalm) {
     const pw = Math.min(IW, PH * palmCanvas.width / palmCanvas.height), px = (W - pw) / 2;
     ctx.save(); roundRect(ctx, px, y, pw, PH, 26); ctx.clip(); ctx.drawImage(palmCanvas, px, y, pw, PH); ctx.restore();
-    ctx.strokeStyle = 'rgba(212,175,55,0.7)'; ctx.lineWidth = 3; roundRect(ctx, px, y, pw, PH, 26); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,178,77,0.7)'; ctx.lineWidth = 3; roundRect(ctx, px, y, pw, PH, 26); ctx.stroke();
     y += PH + 40;
   }
   ctx.textAlign = 'left'; ctx.fillStyle = '#c8cbd6'; ctx.font = `28px ${sans}`;
@@ -247,14 +247,14 @@ export async function drawComboCard(f, c, palmCanvas) {
   y += 40;
   for (const x of f.ranked) {
     ctx.fillStyle = '#f4efe3'; ctx.font = `700 30px ${sans}`; ctx.textAlign = 'left'; ctx.fillText(`${ICON[x.key]} ${x.name}`, PAD, y + 30);
-    ctx.textAlign = 'right'; ctx.fillStyle = '#f1d67a'; ctx.fillText(`${x.combined}`, W - PAD, y + 30);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#ffd08a'; ctx.fillText(`${x.combined}`, W - PAD, y + 30);
     ctx.fillStyle = 'rgba(255,255,255,0.1)'; roundRect(ctx, PAD, y + 46, IW, 14, 7); ctx.fill();
-    ctx.fillStyle = '#d4af37'; roundRect(ctx, PAD, y + 46, IW * x.combined / 100, 14, 7); ctx.fill();
+    ctx.fillStyle = '#ffb24d'; roundRect(ctx, PAD, y + 46, IW * x.combined / 100, 14, 7); ctx.fill();
     ctx.textAlign = 'left'; ctx.fillStyle = '#7f8698'; ctx.font = `22px ${sans}`;
     ctx.fillText(f.sources.map(s => `${SRC[s]} ${x.by[s]}`).join('   '), PAD, y + 88);
     y += 100;
   }
   ctx.textAlign = 'center'; ctx.fillStyle = '#7f8698'; ctx.font = `22px ${sans}`;
-  ctx.fillText('관상 판독기 · 오락용 결과이며 과학적 근거가 없습니다.', W / 2, H - 40);
+  ctx.fillText('운명 판독기 · 오락용 결과이며 과학적 근거가 없습니다.', W / 2, H - 40);
   return cv;
 }
