@@ -10,31 +10,31 @@
 
 export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
-// 표본 19명 (한국인 5명, 가중치 2.8) · [중앙값, 표준편차]
+// 가상 인물 표본 17명 (전체 28명 중 정면 사진) · [중앙값, 표준편차]
 export const POP = {
-  faceRatio: [1.1871, 0.0406],
-  upperRatio: [0.1915, 0.011],
-  middleRatio: [0.3951, 0.0233],
-  lowerRatio: [0.4124, 0.0192],
-  foreheadWidthRatio: [0.7014, 0.0287],
-  jawRatio: [0.8063, 0.0134],
-  chinLen: [0.2067, 0.0202],
-  eyeSize: [0.181, 0.0099],
-  eyeOpen: [0.2801, 0.0411],
-  eyeTilt: [4.2435, 2.1415],
-  interEye: [1.3325, 0.1195],
-  glabella: [1.1219, 0.0657],
-  browArch: [0.2196, 0.0233],
-  browLen: [1.6765, 0.0819],
-  browEyeGap: [0.5497, 0.1217],
-  underEye: [1.3584, 0.1026],
-  noseLen: [0.2905, 0.0125],
-  noseWidth: [0.3062, 0.0198],
-  philtrum: [0.0774, 0.0082],
-  mouthWidth: [0.3647, 0.0328],   // 웃는 표본 보정 후 (무표정 기준)
-  lipThick: [0.1304, 0.0194],
-  symmetry: [0.9156, 0.0341],
-  samjeongSpread: [11.14, 5.28],
+  faceRatio: [1.1822, 0.0485],
+  upperRatio: [0.1905, 0.0086],
+  middleRatio: [0.3855, 0.0122],
+  lowerRatio: [0.4241, 0.0145],
+  foreheadWidthRatio: [0.7033, 0.0203],
+  jawRatio: [0.7993, 0.0193],
+  chinLen: [0.2096, 0.0213],
+  eyeSize: [0.1935, 0.0081],
+  eyeOpen: [0.2967, 0.0456],
+  eyeTilt: [2.9109, 1.5875],
+  interEye: [1.2218, 0.0846],
+  glabella: [1.067, 0.0423],
+  browArch: [0.2204, 0.0139],
+  browLen: [1.6118, 0.0638],
+  browEyeGap: [0.4975, 0.0456],
+  underEye: [1.2586, 0.0826],
+  noseLen: [0.2885, 0.0083],
+  noseWidth: [0.3089, 0.017],
+  philtrum: [0.0786, 0.0127],
+  mouthWidth: [0.3882, 0.0274],
+  lipThick: [0.1331, 0.0299],
+  symmetry: [0.9381, 0.0406],
+  samjeongSpread: [5.53, 4.75],
 };
 /** 표준점수. 측정 오류로 튀는 값은 ±2.5 로 자른다. */
 export const Z = (f, k) => clamp((f[k] - POP[k][0]) / POP[k][1], -2.5, 2.5);
@@ -105,18 +105,23 @@ export const FACE_TYPES = {
   },
 };
 
-export function classifyFaceType(f) {
+/** 오행 얼굴형 원점수 (보정 전). tools/calibrate-population.mjs --offsets 가 평균을 구할 때도 쓴다. */
+export function faceTypeScores(f) {
   const zF = Z(f, 'faceRatio'), zJ = Z(f, 'jawRatio'), zH = Z(f, 'foreheadWidthRatio'), zC = Z(f, 'chinLen'), zL = Z(f, 'lowerRatio');
-  const s = {
+  return {
     wood: 1.0 * zF - 0.4 * zJ - 0.3 * zH,              // 길고 갸름함
     fire: -0.9 * zH + 0.6 * zJ + 0.3 * zL,             // 위는 좁고 아래가 넓음
     earth: -0.6 * zF + 0.6 * zJ + 0.5 * zC,            // 짧고 넓으며 턱이 두툼함
     metal: 0.7 * zH + 0.5 * zJ - 0.5 * Math.abs(zF),   // 이마·턱 폭이 고른 사각
     water: -0.9 * zF - 0.5 * zJ - 0.2 * zC,            // 짧고 둥근 곡선
   };
-  // 표본 평균을 빼서 다섯 형이 고르게 나오도록 맞춘다 (tools/calibrate-population.mjs 기준)
-  const OFFSET = { wood: 0.436, fire: 0.31, earth: -0.272, metal: -0.801, water: -0.053 };
-  for (const k in s) s[k] -= OFFSET[k];
+}
+// 표본 평균을 빼서 다섯 형이 고르게 나오도록 맞춘다 (node tools/calibrate-population.mjs --offsets)
+const FACE_TYPE_OFFSET = { wood: 0.243, fire: -0.075, earth: -0.171, metal: -0.45, water: -0.124 };
+
+export function classifyFaceType(f) {
+  const s = faceTypeScores(f);
+  for (const k in s) s[k] -= FACE_TYPE_OFFSET[k];
   const ranked = Object.entries(s).sort((a, b) => b[1] - a[1]);
   const exp = ranked.map(([k, v]) => [k, Math.exp(v * 1.4)]);
   const total = exp.reduce((acc, [, v]) => acc + v, 0);
@@ -290,16 +295,24 @@ export function analyzePalaces(f) {
 }
 
 // ── 다섯 가지 운세 점수 ──────────────────────────────────────
-export function analyzeFortunes(f, samjeong) {
+/** 다섯 운의 원점수(표준점수, 보정 전). tools/calibrate-population.mjs --offsets 가 평균을 구할 때도 쓴다. */
+export function fortuneZ(f, samjeong) {
   const z = (k) => Z(f, k);
   const zBalance = clamp((POP.samjeongSpread[0] - samjeong.spread) / POP.samjeongSpread[1], -2.5, 2.5);
-  const zs = {
+  return {
     wealth: combine([[0.35, z('noseWidth')], [0.25, z('jawRatio')], [0.2, z('upperRatio')], [0.2, z('browEyeGap')]]),
     love: combine([[0.3, z('lipThick')], [0.25, z('eyeSize')], [0.25, z('eyeTilt')], [0.2, z('glabella')]]),
     career: combine([[0.3, z('upperRatio')], [0.25, z('jawRatio')], [0.2, z('browLen')], [0.25, zBalance]]),
     health: combine([[0.35, zBalance], [0.3, z('symmetry')], [0.2, z('philtrum')], [0.15, z('chinLen')]]),
     social: combine([[0.3, z('mouthWidth')], [0.25, z('interEye')], [0.25, z('glabella')], [0.2, z('browEyeGap')]]),
   };
+}
+// 표본 평균을 빼서 다섯 운이 고르게 1위가 되도록 맞춘다 (node tools/calibrate-population.mjs --offsets)
+const FORTUNE_OFFSET = { wealth: -0.22, love: 0.213, career: -0.331, health: -0.295, social: -0.16 };
+
+export function analyzeFortunes(f, samjeong) {
+  const raw = fortuneZ(f, samjeong);
+  const zs = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, v - FORTUNE_OFFSET[k]]));
   const meta = {
     wealth: { name: '재물운', hanja: '財', icon: '🪙',
       tiers: ['재물의 그릇이 크게 열려 있습니다. 코와 턱이 든든해 큰돈을 다루고 지키는 힘이 함께 있으니 사업·투자에서 결실이 큽니다.',

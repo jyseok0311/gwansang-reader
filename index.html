@@ -82,10 +82,13 @@
 
     <!-- 카메라 화면 (휴대폰에서는 전체 화면) -->
     <section id="view-camera" class="panel cam hidden" aria-label="얼굴 촬영">
-      <div class="cam-stage">
-        <video id="video" autoplay playsinline muted></video>
-        <canvas id="overlay" aria-hidden="true"></canvas>
-        <div class="guide" aria-hidden="true"><div class="oval"></div></div>
+      <div id="cam-stage" class="cam-stage">
+        <!-- 영상과 윤곽선을 한 겹으로 묶어 같은 크기·같은 반전으로 배치 (app.js layoutCamera) -->
+        <div id="cam-layer" class="cam-layer">
+          <video id="video" autoplay playsinline muted disablepictureinpicture></video>
+          <canvas id="overlay" aria-hidden="true"></canvas>
+        </div>
+        <div id="oval" class="oval" aria-hidden="true"></div>
         <div id="status" class="status" role="status" aria-live="polite">카메라를 준비하는 중…</div>
         <div id="flash" class="flash" aria-hidden="true"></div>
       </div>
@@ -96,7 +99,7 @@
           <span class="dot"></span>
         </button>
         <button id="btn-switch" class="round ghost" type="button" aria-label="카메라 전환">🔄</button>
-        <label class="auto-toggle"><input id="auto-toggle" type="checkbox" checked> 자동 촬영</label>
+        <label class="auto-toggle"><input id="auto-toggle" type="checkbox" checked> 자동 촬영<span class="auto-hint"> (가만히 있으면 찰칵)</span></label>
       </div>
     </section>
 

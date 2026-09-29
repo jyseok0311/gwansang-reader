@@ -28,6 +28,10 @@ const $ = (s) => document.querySelector(s);
 const views = { intro: $('#view-intro'), camera: $('#view-camera'), analyzing: $('#view-analyzing'), result: $('#view-result') };
 const video = $('#video');
 const overlay = $('#overlay');
+const camStage = $('#cam-stage');
+const camLayer = $('#cam-layer');
+const ovalEl = $('#oval');
+const camControls = $('.cam-controls');
 const snapshot = $('#snapshot');
 const statusEl = $('#status');
 const btnCapture = $('#btn-capture');
@@ -52,6 +56,11 @@ let featureBuf = [];
 let lastResult = null;
 let current = 'intro';
 let resumeCamOnVisible = false;
+let wakeLock = null;
+let cardPromise = null;
+let liveInfo = null;   // 마지막 실시간 판정값 (디버그용)
+// 카메라 화면 배치: 영상 좌표 → 화면 좌표 변환값과 타원 위치 (layoutCamera 가 갱신)
+const geo = { s: 1, left: 0, top: 0, vw: 0, vh: 0, sw: 0, sh: 0, mirrored: false, oval: null };
 
 // ── 유틸 ─────────────────────────────────────────────────────
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -71,6 +80,7 @@ function setEngineStatus(text, cls = '') {
 function show(name, { history: mode = 'push' } = {}) {
   const prev = current;
   current = name;
+  document.body.dataset.view = name;
   Object.entries(views).forEach(([k, el]) => el.classList.toggle('hidden', k !== name));
   document.body.classList.toggle('cam-open', name === 'camera');
   if (mode === 'push' && prev !== name) history.pushState({ view: name }, '');
@@ -92,7 +102,9 @@ function loadEngine() {
   return engine.promise;
 }
 async function createEngine() {
-  setEngineStatus('판독 엔진 준비 중…');
+  let cached = null;
+  try { cached = window.caches ? await caches.match(ENGINE_SOURCES[0].model) : null; } catch { /* 무시 */ }
+  setEngineStatus(cached ? '판독 엔진 준비 중…' : '판독 엔진 내려받는 중… (처음 한 번만, 약 13MB)');
   let lastErr;
   for (const src of ENGINE_SOURCES) {
     try {
@@ -139,9 +151,11 @@ async function setMode(mode) {
 async function startStream() {
   stopStream();
   const token = camToken;
-  const portrait = window.innerHeight > window.innerWidth;
-  const size = portrait ? { width: { ideal: 720 }, height: { ideal: 1280 } } : { width: { ideal: 1280 }, height: { ideal: 720 } };
-  const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing }, ...size }, audio: false });
+  // 휴대폰 브라우저는 해상도 값을 센서(가로) 기준으로 해석하고 세로 화면에서는 알아서 돌려준다.
+  // 세로 값(720x1280)을 요청하면 기기에 따라 가로 영상이 와서 화면이 한쪽으로 크게 잘리므로 항상 가로 기준으로 요청한다.
+  const s = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false,
+  });
   if (token !== camToken) { s.getTracks().forEach(t => t.stop()); throw Object.assign(new Error('취소됨'), { name: 'AbortError' }); }
   stream = s;
   video.srcObject = s;
@@ -149,10 +163,11 @@ async function startStream() {
   await video.play().catch(() => {});
   const settingsFacing = s.getVideoTracks()[0]?.getSettings?.().facingMode;
   const mirrored = settingsFacing ? settingsFacing === 'user' : facing === 'user';
-  video.classList.toggle('mirror', mirrored);
-  overlay.classList.toggle('mirror', mirrored);
+  camLayer.classList.toggle('mirror', mirrored);
   video.dataset.mirrored = mirrored ? '1' : '';
+  geo.mirrored = mirrored;
   syncOverlaySize();
+  layoutCamera();
   updateSwitchButton();
 }
 function stopStream() {
@@ -161,6 +176,7 @@ function stopStream() {
 }
 function stopCamera() {
   camToken++;
+  keepAwake(false);
   if (rafId) cancelAnimationFrame(rafId);
   rafId = null;
   stopStream();
@@ -179,6 +195,52 @@ function syncOverlaySize() {
   }
 }
 
+// 영상을 화면에 꽉 차게(cover) 놓되, 비율 차이가 커서 절반 넘게 잘리면 전체가 보이게(contain) 놓는다.
+// 영상과 윤곽선 캔버스가 한 레이어에 있으므로 둘은 항상 정확히 겹친다.
+function layoutCamera() {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const sw = camStage.clientWidth, sh = camStage.clientHeight;
+  if (!vw || !vh || !sw || !sh) return;
+  const cover = Math.max(sw / vw, sh / vh);
+  const visibleFrac = Math.min(sw / (vw * cover), sh / (vh * cover));
+  const s = visibleFrac < 0.55 ? Math.min(sw / vw, sh / vh) : cover;
+  const w = vw * s, h = vh * s, left = (sw - w) / 2, top = (sh - h) / 2;
+  Object.assign(camLayer.style, { width: `${w}px`, height: `${h}px`, left: `${left}px`, top: `${top}px` });
+
+  // 실제로 영상이 보이는 영역 안에서, 상단 안내 문구와 하단 버튼에 가리지 않는 곳에 타원을 둔다
+  const visL = Math.max(0, left), visR = Math.min(sw, left + w);
+  let availT = Math.max(0, top), availB = Math.min(sh, top + h);
+  const stageR = camStage.getBoundingClientRect();
+  const statusR = statusEl.getBoundingClientRect();
+  if (statusR.height && statusR.top - stageR.top < sh / 3) availT = Math.max(availT, statusR.bottom - stageR.top + 8);
+  const ctrlR = camControls.getBoundingClientRect();
+  const ctrlOverlaps = ctrlR.top < stageR.bottom - 1 && ctrlR.bottom > stageR.top && ctrlR.left < stageR.right - 1 && ctrlR.right > stageR.left + 1;
+  if (ctrlOverlaps) availB = Math.min(availB, ctrlR.top - stageR.top - 8);
+  let oh = (availB - availT) * 0.84, ow = oh * 0.75;
+  if (ow > (visR - visL) * 0.84) { ow = (visR - visL) * 0.84; oh = ow / 0.75; }
+  const cx = (visL + visR) / 2, cy = (availT + availB) / 2;
+  Object.assign(ovalEl.style, { width: `${ow}px`, height: `${oh}px`, left: `${cx - ow / 2}px`, top: `${cy - oh / 2}px`, transform: 'none', aspectRatio: 'auto' });
+  Object.assign(geo, { s, left, top, vw, vh, sw, sh, oval: { cx, cy, w: ow, h: oh } });
+}
+function relayoutCamera() { if (current === 'camera' && stream) layoutCamera(); }
+/** 영상 좌표 → 카메라 화면(스테이지) 좌표. 좌우반전을 반영한다. */
+function toDisplay(p) {
+  const x = geo.mirrored ? geo.vw - p.x : p.x;
+  return { x: geo.left + x * geo.s, y: geo.top + p.y * geo.s };
+}
+
+// 촬영 화면에서 화면이 꺼지지 않게 한다 (지원 브라우저만)
+async function keepAwake(on) {
+  try {
+    if (on && !wakeLock && 'wakeLock' in navigator && !document.hidden) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } else if (!on && wakeLock) {
+      const l = wakeLock; wakeLock = null; await l.release();
+    }
+  } catch { /* 무시 */ }
+}
+
 async function openCamera() {
   if (!CAN_LIVE) { captureInput.click(); return; }
   const token = ++camToken;
@@ -190,6 +252,8 @@ async function openCamera() {
     if (token !== camToken || current !== 'camera') { stopCamera(); return; }
     await setMode('VIDEO');
     setLive('', '타원 안에 얼굴을 맞춰 주세요.');
+    layoutCamera();
+    keepAwake(true);
     lastVideoTime = -1;
     if (!rafId) rafId = requestAnimationFrame(liveLoop);
   } catch (e) {
@@ -216,6 +280,7 @@ function liveLoop(now) {
   lastDetect = now;
   lastVideoTime = video.currentTime;
   syncOverlaySize();
+  if (video.videoWidth !== geo.vw || video.videoHeight !== geo.vh || camStage.clientWidth !== geo.sw || camStage.clientHeight !== geo.sh) layoutCamera();
 
   let res;
   try { res = lmk.detectForVideo(video, now); } catch (e) { return; }
@@ -229,7 +294,7 @@ function liveLoop(now) {
   }
   const pts = toPixels(lm, overlay.width, overlay.height);
   const feat = measure(pts);   // 3D 자세 보정 포함 (고개 각도 판정에도 사용)
-  const check = frontalCheck(pts, feat.pose, overlay.width, overlay.height, res.faceBlendshapes?.[0]?.categories);
+  const check = frontalCheck(pts, feat.pose, res.faceBlendshapes?.[0]?.categories);
   drawMesh(ctx, pts, check.ok);
   setLive(check.ok ? 'ok' : 'warn', check.msg);
   btnCapture.disabled = !check.ok;
@@ -259,16 +324,28 @@ function blend(cats, name) { return cats?.find(c => c.categoryName === name)?.sc
 // pitch 가 음수면 턱을 든 상태, 양수면 턱을 숙인 상태.
 const POSE_LIMIT = { yaw: 9, roll: 10, pitchMin: -10, pitchMax: 16 };
 
-function frontalCheck(pts, pose, w, h, cats) {
-  const faceW = dist(pts[LM.cheekL], pts[LM.cheekR]);
-  const short = Math.min(w, h);
-  const { yaw, roll, pitch } = pose;
-  const center = mid(pts[LM.top], pts[LM.chin]);
-  const off = Math.hypot(center.x - w / 2, center.y - h / 2) / short;
+// 위치·크기 판정 기준 (타원 대비 비율). 타원은 머리카락까지 포함한 머리 전체를 감싸는 크기다.
+// size: 얼굴 윤곽선(이마 윗부분~턱) 높이 ÷ 타원 높이. 머리가 타원에 알맞게 들어오면 약 0.6.
+// dyTarget: 이마 위 머리카락 때문에 얼굴 중심은 타원 중심보다 약간 아래에 오는 것이 자연스럽다.
+const FIT = { minSize: 0.48, maxSize: 0.85, maxDx: 0.15, maxDy: 0.13, dyTarget: 0.06 };
 
-  if (faceW / short < 0.24) return { ok: false, msg: '조금 더 가까이 와 주세요.' };
-  if (faceW / short > 0.85) return { ok: false, msg: '조금 뒤로 물러나 주세요.' };
-  if (off > 0.24) return { ok: false, msg: '얼굴을 화면 가운데로 옮겨 주세요.' };
+function frontalCheck(pts, pose, cats) {
+  const o = geo.oval;
+  if (!o) return { ok: false, msg: '카메라를 준비하는 중…' };
+  const top = toDisplay(pts[LM.top]), chin = toDisplay(pts[LM.chin]);
+  const l = toDisplay(pts[LM.cheekL]), r = toDisplay(pts[LM.cheekR]);
+  const size = dist(top, chin) / o.h;
+  const dx = ((l.x + r.x) / 2 - o.cx) / o.w;          // + 면 화면 오른쪽으로 치우침
+  const dy = ((top.y + chin.y) / 2 - o.cy) / o.h - FIT.dyTarget;   // + 면 화면 아래쪽으로 치우침
+  const { yaw, roll, pitch } = pose;
+  liveInfo = { size: +size.toFixed(2), dx: +dx.toFixed(2), dy: +dy.toFixed(2), yaw: +yaw.toFixed(1), pitch: +pitch.toFixed(1), roll: +roll.toFixed(1) };
+
+  if (size < FIT.minSize) return { ok: false, msg: '조금 더 가까이 와 주세요.' };
+  if (size > FIT.maxSize) return { ok: false, msg: '조금 뒤로 물러나 주세요.' };
+  if (Math.abs(dx) > FIT.maxDx || Math.abs(dy) > FIT.maxDy) {
+    if (Math.abs(dx) / FIT.maxDx >= Math.abs(dy) / FIT.maxDy) return { ok: false, msg: dx > 0 ? '← 얼굴을 화면 왼쪽으로 옮겨 주세요.' : '얼굴을 화면 오른쪽으로 옮겨 주세요. →' };
+    return { ok: false, msg: dy > 0 ? '↑ 얼굴을 화면 위쪽으로 옮겨 주세요.' : '↓ 얼굴을 화면 아래쪽으로 옮겨 주세요.' };
+  }
   if (Math.abs(yaw) > POSE_LIMIT.yaw) return { ok: false, msg: '정면을 바라봐 주세요.' };
   if (Math.abs(roll) > POSE_LIMIT.roll) return { ok: false, msg: '고개를 바르게 세워 주세요.' };
   if (pitch < POSE_LIMIT.pitchMin) return { ok: false, msg: '턱을 조금 내려 주세요.' };
@@ -404,6 +481,8 @@ async function analyzeSnapshot({ liveFeatures = [], history: histMode = 'push' }
     renderResult(result);
     show('result', { history: 'replace' });
     animateMeters();
+    cardPromise = null;
+    setTimeout(() => { if (lastResult === result) cardPromise = makeCardFile().catch(() => null); }, 400);
     const { yaw, pitch } = snapFeatures.pose;
     if (!liveFeatures.length && (Math.abs(yaw) > 15 || Math.abs(pitch) > 15)) {
       showToast('얼굴이 다소 돌아가 있어 자세를 보정했습니다. 정면 사진일수록 정확합니다.', 4200);
@@ -625,15 +704,21 @@ async function drawCard() {
   return c;
 }
 
+async function makeCardFile() {
+  const canvas = await drawCard();
+  // JPEG: PNG보다 인코딩이 빠르고 용량이 작아 메신저 공유에 알맞다
+  const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9));
+  if (!blob) throw new Error('카드 이미지를 만들지 못했습니다.');
+  return new File([blob], `관상판독_${new Date().toISOString().slice(0, 10)}.jpg`, { type: 'image/jpeg' });
+}
+
 async function saveCard() {
   if (!lastResult) return;
   const btn = $('#btn-save');
   btn.disabled = true;
   try {
-    const canvas = await drawCard();
-    const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
-    const name = `관상판독_${new Date().toISOString().slice(0, 10)}.png`;
-    const file = new File([blob], name, { type: 'image/png' });
+    const file = (await cardPromise) || await makeCardFile();
+    const blob = file, name = file.name;
     const t = lastResult.type.primary;
     if (IS_MOBILE && navigator.canShare?.({ files: [file] })) {
       try {
@@ -743,6 +828,11 @@ $('#btn-retake').addEventListener('click', () => {
 $('#btn-home').addEventListener('click', () => show('intro', { history: 'replace' }));
 $('#btn-save').addEventListener('click', saveCard);
 
+window.addEventListener('resize', relayoutCamera);
+window.visualViewport?.addEventListener('resize', relayoutCamera);
+screen.orientation?.addEventListener?.('change', () => setTimeout(relayoutCamera, 250));
+video.addEventListener('resize', () => { syncOverlaySize(); relayoutCamera(); });
+
 // 다른 앱으로 전환하면 카메라를 끄고, 돌아오면 다시 켠다 (배터리·개인정보 보호)
 document.addEventListener('visibilitychange', () => {
   if (current !== 'camera') return;
@@ -758,7 +848,8 @@ if (!CAN_LIVE) {
 }
 if (IS_MOBILE && typeof navigator.canShare === 'function') $('#btn-save').textContent = '📤 결과 공유';
 setupMobileCard();
-loadEngine().catch(() => { /* 상태 문구로 안내됨 */ });
+if (navigator.connection?.saveData) setEngineStatus('데이터 절약 모드: 촬영을 시작할 때 판독 엔진(약 13MB)을 내려받습니다.');
+else loadEngine().catch(() => { /* 상태 문구로 안내됨 */ });
 
 // 테스트 훅
 window.gwansang = {
@@ -777,6 +868,8 @@ window.gwansang = {
     return m;
   },
   get last() { return lastResult; },
+  get live() { return liveInfo; },
+  get geo() { return { ...geo }; },
   get engine() { return { source: engine.source?.name, delegate: engine.delegate, mode: engine.mode }; },
   env: { IS_MOBILE, CAN_LIVE },
   measure,
