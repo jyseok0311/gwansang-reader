@@ -5,15 +5,22 @@
 // ─────────────────────────────────────────────────────────────
 import { analyze, clamp, gradeLabel } from './physiognomy.js';
 import { measure, LM, dist, mid, estimateDistance, correctPerspective } from './measure.js';
+import { computeSaju, interpretSaju } from './saju.js';
+import { analyzePalm, isPalmFacing } from './palm.js';
+import { interpretPalm } from './palm-reading.js';
+import { fuse } from './fusion.js';
+import * as V from './views-combo.js';
+import { wrapLines, roundRect } from './util.js';
 
 // ── 엔진 경로: 로컬(vendor/) 우선, 없으면 CDN ────────────────
 const MP_VERSION = '0.10.14';
 const abs = (p) => new URL(p, location.href).href;
 const ENGINE_SOURCES = [
-  { name: 'local', bundle: abs('./vendor/tasks-vision/vision_bundle.mjs'), wasm: abs('./vendor/tasks-vision/wasm'), model: abs('./vendor/face_landmarker.task') },
+  { name: 'local', bundle: abs('./vendor/tasks-vision/vision_bundle.mjs'), wasm: abs('./vendor/tasks-vision/wasm'), model: abs('./vendor/face_landmarker.task'), handModel: abs('./vendor/hand_landmarker.task') },
   { name: 'cdn', bundle: `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/vision_bundle.mjs`,
     wasm: `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`,
-    model: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task' },
+    model: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+    handModel: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task' },
 ];
 
 // ── 환경 판별 ────────────────────────────────────────────────
@@ -27,7 +34,11 @@ const CAMERA_DIAG_FOV = IS_MOBILE ? 80 : 72;
 
 // ── DOM ──────────────────────────────────────────────────────
 const $ = (s) => document.querySelector(s);
-const views = { intro: $('#view-intro'), camera: $('#view-camera'), analyzing: $('#view-analyzing'), result: $('#view-result') };
+const views = {
+  intro: $('#view-intro'), camera: $('#view-camera'), analyzing: $('#view-analyzing'), result: $('#view-result'),
+  hub: $('#view-hub'), sajuform: $('#view-sajuform'), saju: $('#view-saju'), palm: $('#view-palm'), combo: $('#view-combo'),
+};
+const BAR_VIEWS = new Set(['result', 'saju', 'palm', 'combo']);   // 하단 고정 버튼 막대가 있는 화면
 const video = $('#video');
 const overlay = $('#overlay');
 const camStage = $('#cam-stage');
@@ -42,10 +53,17 @@ const autoToggle = $('#auto-toggle');
 const progressRing = $('#shutter-progress');
 const fileInput = $('#file-input');
 const captureInput = $('#capture-input');
+const palmInput = $('#palm-input');
+const palmCaptureInput = $('#palm-capture-input');
 const toast = $('#toast');
 
 // ── 상태 ─────────────────────────────────────────────────────
-const engine = { mod: null, vision: null, source: null, delegate: null, landmarker: null, mode: 'VIDEO', promise: null };
+const engine = { mod: null, vision: null, source: null, delegate: null, landmarker: null, mode: 'VIDEO', promise: null, hand: null, handMode: 'VIDEO', handPromise: null, handDelegate: null };
+// 종합 분석: 관상(face)·손금(palm)·사주(saju) 결과와 합친 결과(fused)
+const combo = { face: null, palm: null, saju: null, fused: null };
+let captureKind = 'face';   // 지금 카메라로 찍는 것: 'face' | 'palm'
+let flow = 'single';        // 'single': 관상만 보기 / 'combo': 종합 분석 허브에서 시작
+let palmStable = { x: 0, y: 0, t: 0 };
 let stream = null;
 let facing = 'user';
 let rafId = null;
@@ -83,17 +101,21 @@ function show(name, { history: mode = 'push' } = {}) {
   const prev = current;
   current = name;
   document.body.dataset.view = name;
+  document.body.dataset.bar = BAR_VIEWS.has(name) ? '1' : '';
   Object.entries(views).forEach(([k, el]) => el.classList.toggle('hidden', k !== name));
   document.body.classList.toggle('cam-open', name === 'camera');
   if (mode === 'push' && prev !== name) history.pushState({ view: name }, '');
   else if (mode === 'replace') history.replaceState({ view: name }, '');
-  window.scrollTo({ top: 0, behavior: name === 'result' ? 'auto' : 'smooth' });
+  window.scrollTo({ top: 0, behavior: BAR_VIEWS.has(name) ? 'auto' : 'smooth' });
+  syncBackLinks();
 }
 history.replaceState({ view: 'intro' }, '');
 window.addEventListener('popstate', (e) => {
   let v = e.state?.view || 'intro';
   if (v === 'analyzing' || (v === 'result' && !lastResult)) v = 'intro';
+  if ((v === 'palm' && !combo.palm) || (v === 'saju' && !combo.saju) || (v === 'combo' && !combo.fused)) v = 'hub';
   if (current === 'camera' && v !== 'camera') stopCamera();
+  if (v === 'hub') renderHub();
   show(v, { history: 'none' });
   if (v === 'camera') openCamera();
 });
@@ -149,6 +171,36 @@ async function setMode(mode) {
   engine.mode = mode;
 }
 
+// 손 인식 모델은 손금을 볼 때 처음 불러온다 (약 8MB)
+function loadHand() {
+  if (!engine.handPromise) engine.handPromise = (async () => {
+    await loadEngine();
+    return buildHand('GPU');
+  })().catch(e => { engine.handPromise = null; throw e; });
+  return engine.handPromise;
+}
+async function buildHand(delegate) {
+  const { mod, vision, source } = engine;
+  const opts = (d) => ({
+    baseOptions: { modelAssetPath: source.handModel, delegate: d }, runningMode: 'VIDEO', numHands: 1,
+    minHandDetectionConfidence: 0.4, minHandPresenceConfidence: 0.4, minTrackingConfidence: 0.4,
+  });
+  try { engine.hand?.close(); } catch { /* 무시 */ }
+  try { engine.hand = await mod.HandLandmarker.createFromOptions(vision, opts(delegate)); engine.handDelegate = delegate; }
+  catch (e) {
+    if (delegate !== 'GPU') throw e;
+    console.warn('손 인식 GPU 실패, CPU로 전환', e);
+    engine.hand = await mod.HandLandmarker.createFromOptions(vision, opts('CPU')); engine.handDelegate = 'CPU';
+  }
+  engine.handMode = 'VIDEO';
+  return engine.hand;
+}
+async function setHandMode(mode) {
+  if (engine.handMode === mode) return;
+  await engine.hand.setOptions({ runningMode: mode });
+  engine.handMode = mode;
+}
+
 // ── 카메라 ───────────────────────────────────────────────────
 async function startStream() {
   stopStream();
@@ -164,7 +216,8 @@ async function startStream() {
   if (video.readyState < 1) await new Promise(res => video.addEventListener('loadedmetadata', res, { once: true }));
   await video.play().catch(() => {});
   const settingsFacing = s.getVideoTracks()[0]?.getSettings?.().facingMode;
-  const mirrored = settingsFacing ? settingsFacing === 'user' : facing === 'user';
+  // 노트북 웹캠은 방향 정보를 안 주는 경우가 많다. 컴퓨터에서는 거울처럼 좌우반전해서 보여 주는 것이 자연스럽다.
+  const mirrored = settingsFacing ? settingsFacing === 'user' : (!IS_MOBILE || facing === 'user');
   camLayer.classList.toggle('mirror', mirrored);
   video.dataset.mirrored = mirrored ? '1' : '';
   geo.mirrored = mirrored;
@@ -243,17 +296,30 @@ async function keepAwake(on) {
   } catch { /* 무시 */ }
 }
 
+/** 관상(face) 또는 손금(palm) 촬영을 시작한다 */
+function startCapture(kind, { replace = false } = {}) {
+  captureKind = kind;
+  facing = kind === 'palm' ? 'environment' : 'user';   // 손바닥은 화질이 좋은 뒷면 카메라가 기본
+  if (!CAN_LIVE) { (kind === 'palm' ? palmCaptureInput : captureInput).click(); return; }
+  show('camera', { history: replace ? 'replace' : 'push' });
+  openCamera();
+}
+
 async function openCamera() {
-  if (!CAN_LIVE) { captureInput.click(); return; }
+  const palm = captureKind === 'palm';
+  if (!CAN_LIVE) { (palm ? palmCaptureInput : captureInput).click(); return; }
   const token = ++camToken;
+  views.camera.classList.toggle('palm', palm);
+  $('#cam-kind').textContent = palm ? '손금 촬영' : '관상 촬영';
   btnCapture.disabled = true;
   resetHold();
-  setLive('warn', engine.landmarker ? '카메라를 준비하는 중…' : '판독 엔진을 불러오는 중…');
+  const ready = palm ? engine.hand : engine.landmarker;
+  setLive('warn', ready ? '카메라를 준비하는 중…' : '판독 엔진을 불러오는 중…');
   try {
-    await Promise.all([startStream(), loadEngine()]);
+    await Promise.all([startStream(), palm ? loadHand() : loadEngine()]);
     if (token !== camToken || current !== 'camera') { stopCamera(); return; }
-    await setMode('VIDEO');
-    setLive('', '타원 안에 얼굴을 맞춰 주세요.');
+    if (palm) await setHandMode('VIDEO'); else await setMode('VIDEO');
+    setLive('', palm ? '손가락을 펴고 손바닥을 틀 안에 맞춰 주세요.' : '타원 안에 얼굴을 맞춰 주세요.');
     layoutCamera();
     keepAwake(true);
     lastVideoTime = -1;
@@ -269,13 +335,14 @@ async function openCamera() {
     }[e.name] || ('카메라를 열 수 없습니다: ' + (e.message || e));
     showToast(msg, 5000);
     stopCamera();
-    show('intro', { history: 'replace' });
+    if (flow === 'combo') backToHub(); else show('intro', { history: 'replace' });
   }
 }
 
 // ── 실시간 미리보기 루프 ─────────────────────────────────────
 function liveLoop(now) {
   rafId = requestAnimationFrame(liveLoop);
+  if (captureKind === 'palm') { palmLoop(now); return; }
   const lmk = engine.landmarker;
   if (!stream || !lmk || capturing || engine.mode !== 'VIDEO') return;
   if (video.readyState < 2 || now - lastDetect < DETECT_INTERVAL || video.currentTime === lastVideoTime) return;
@@ -318,6 +385,94 @@ function setLive(level, msg) {
   statusEl.className = 'status ' + level;
   views.camera.classList.toggle('ok', level === 'ok');
   if (level !== 'ok') btnCapture.disabled = true;
+}
+
+
+// ── 손바닥 실시간 안내 ───────────────────────────────────────
+const PALM_HOLD_MS = 1500;                 // 손바닥은 흔들림에 민감해 조금 더 오래 멈추게 한다
+const PALM_FIT = { minW: 0.30, maxW: 0.62, maxDx: 0.22, maxDy: 0.20, maxTilt: 38, maxMove: 0.012 };
+const lightCv = document.createElement('canvas'); lightCv.width = lightCv.height = 48;
+
+function palmLoop(now) {
+  const hl = engine.hand;
+  if (!stream || !hl || capturing || engine.handMode !== 'VIDEO') return;
+  if (video.readyState < 2 || now - lastDetect < DETECT_INTERVAL || video.currentTime === lastVideoTime) return;
+  lastDetect = now; lastVideoTime = video.currentTime;
+  syncOverlaySize();
+  if (video.videoWidth !== geo.vw || video.videoHeight !== geo.vh || camStage.clientWidth !== geo.sw || camStage.clientHeight !== geo.sh) layoutCamera();
+  let res;
+  try { res = hl.detectForVideo(video, now); } catch (e) { return; }
+  const ctx = overlay.getContext('2d');
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  const raw = res?.landmarks?.[0];
+  if (!raw) { setLive('', '손바닥을 펴서 틀 안에 보여 주세요.'); resetHold(); return; }
+  const pts = raw.map(p => ({ x: p.x * overlay.width, y: p.y * overlay.height }));
+  const check = palmCheck(pts, res.handednesses?.[0]?.[0]?.categoryName, now);
+  drawHand(ctx, pts, check.ok);
+  setLive(check.ok ? 'ok' : 'warn', check.msg);
+  btnCapture.disabled = !check.ok;
+  if (!check.ok) { resetHold(); return; }
+  if (!goodSince) goodSince = now;
+  if (autoToggle.checked) {
+    const pr = clamp((now - goodSince) / PALM_HOLD_MS, 0, 1);
+    setProgress(pr);
+    if (pr >= 1) captureFromVideo();
+  }
+}
+
+function palmCheck(pts, label, now) {
+  const o = geo.oval;
+  if (!o) return { ok: false, msg: '카메라를 준비하는 중…' };
+  const W = dist(pts[5], pts[17]);
+  const short = Math.min(video.videoWidth, video.videoHeight);
+  // 손 전체를 감싸는 상자의 가운데를 화면 좌표로
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  const c = toDisplay({ x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 });
+  const dx = (c.x - o.cx) / o.w, dy = (c.y - o.cy) / o.h;
+  const wrist = toDisplay(pts[0]), mcp = toDisplay(pts[9]);
+  let tilt = Math.abs(Math.atan2(mcp.x - wrist.x, wrist.y - mcp.y) * 180 / Math.PI);   // 손가락이 위쪽을 향하면 0도
+  const inFrame = [0, 4, 8, 12, 16, 20].every(i => pts[i].x > overlay.width * 0.01 && pts[i].x < overlay.width * 0.99 && pts[i].y > overlay.height * 0.01 && pts[i].y < overlay.height * 0.99);
+  liveInfo = { palmW: +(W / short).toFixed(2), dx: +dx.toFixed(2), dy: +dy.toFixed(2), tilt: +tilt.toFixed(0) };
+
+  if (!isPalmFacing(pts, label)) return { ok: false, msg: '손등이 보여요. 손바닥이 카메라를 향하게 해 주세요.' };
+  if (!inFrame) return { ok: false, msg: '손가락 끝이 화면 밖으로 나갔어요. 조금 멀리 떨어져 주세요.' };
+  // 손가락이 펴졌는지: 손목에서 각 손가락 끝까지가 손가락 뿌리까지보다 충분히 길어야 한다
+  const open = [[5, 8], [9, 12], [13, 16], [17, 20]].every(([m, t]) => dist(pts[0], pts[t]) / dist(pts[0], pts[m]) > 1.55);
+  if (!open) return { ok: false, msg: '손가락을 쭉 펴 주세요.' };
+  if (W / short < PALM_FIT.minW) return { ok: false, msg: '손을 조금 더 가까이 가져와 주세요.' };
+  if (W / short > PALM_FIT.maxW) return { ok: false, msg: '손을 조금 멀리 떨어뜨려 주세요.' };
+  if (Math.abs(dx) > PALM_FIT.maxDx || Math.abs(dy) > PALM_FIT.maxDy) {
+    if (Math.abs(dx) / PALM_FIT.maxDx >= Math.abs(dy) / PALM_FIT.maxDy) return { ok: false, msg: dx > 0 ? '← 손을 왼쪽으로 옮겨 주세요.' : '손을 오른쪽으로 옮겨 주세요. →' };
+    return { ok: false, msg: dy > 0 ? '↑ 손을 위쪽으로 옮겨 주세요.' : '↓ 손을 아래쪽으로 옮겨 주세요.' };
+  }
+  if (tilt > PALM_FIT.maxTilt) return { ok: false, msg: '손가락 끝이 위쪽을 향하게 세워 주세요.' };
+  // 손이 움직이는지 (움직이면 흐리게 찍힌다)
+  const mv = Math.hypot(c.x - palmStable.x, c.y - palmStable.y) / Math.max(o.w, 1);
+  const dt = Math.max(1, now - palmStable.t);
+  palmStable = { x: c.x, y: c.y, t: now };
+  if (mv / (dt / 33) > PALM_FIT.maxMove * 2.2) return { ok: false, msg: '손을 잠시 멈춰 주세요.' };
+  // 밝기
+  try {
+    const lc = lightCv.getContext('2d', { willReadFrequently: true });
+    lc.drawImage(video, 0, 0, lightCv.width, lightCv.height);
+    const d = lc.getImageData(0, 0, lightCv.width, lightCv.height).data;
+    let sum = 0; for (let i = 0; i < d.length; i += 4) sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    const br = sum / (d.length / 4);
+    if (br < 55) return { ok: false, msg: '너무 어두워요. 밝은 곳으로 가 주세요.' };
+    if (br > 235) return { ok: false, msg: '빛이 너무 강해요. 그림자가 덜한 곳으로 가 주세요.' };
+  } catch { /* 밝기 검사를 못 해도 촬영은 가능 */ }
+  return { ok: true, msg: autoToggle.checked ? '좋습니다. 손을 그대로 멈춰 주세요.' : '좋습니다. 촬영 버튼을 눌러 주세요.' };
+}
+
+function drawHand(ctx, pts, ok) {
+  const conns = engine.mod.HandLandmarker.HAND_CONNECTIONS;
+  const lw = Math.max(2, ctx.canvas.width / 320);
+  ctx.save();
+  ctx.lineWidth = lw; ctx.strokeStyle = ok ? 'rgba(111,211,154,0.9)' : 'rgba(255,143,107,0.85)';
+  strokeConnections(ctx, pts, conns);
+  ctx.fillStyle = ok ? 'rgba(241,214,122,0.95)' : 'rgba(255,200,170,0.9)';
+  for (const p of pts) { ctx.beginPath(); ctx.arc(p.x, p.y, lw * 1.3, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
 }
 
 function blend(cats, name) { return cats?.find(c => c.categoryName === name)?.score ?? 0; }
@@ -386,7 +541,8 @@ function drawMesh(ctx, pts, ok) {
 async function captureFromVideo() {
   if (capturing || !stream) return;
   capturing = true;
-  const buf = featureBuf.map(b => b.f);
+  const palm = captureKind === 'palm';
+  const buf = palm ? [] : featureBuf.map(b => b.f);
   const flash = $('#flash');
   flash.classList.remove('on'); void flash.offsetWidth; flash.classList.add('on');
   navigator.vibrate?.(30);
@@ -397,12 +553,15 @@ async function captureFromVideo() {
   snapshot.height = Math.round(h * scale);
   const ctx = snapshot.getContext('2d');
   ctx.save();
-  if (video.dataset.mirrored) { ctx.translate(snapshot.width, 0); ctx.scale(-1, 1); }
+  // 얼굴은 미리보기(거울)와 같은 모습으로 저장, 손바닥은 실제 보이는 모습 그대로 저장
+  if (video.dataset.mirrored && !palm) { ctx.translate(snapshot.width, 0); ctx.scale(-1, 1); }
   ctx.drawImage(video, 0, 0, snapshot.width, snapshot.height);
   ctx.restore();
   stopCamera();
-  try { await analyzeSnapshot({ liveFeatures: buf, history: 'replace', fov: { deg: CAMERA_DIAG_FOV, source: 'camera' } }); }
-  finally { capturing = false; }
+  try {
+    if (palm) await analyzePalmSnapshot({ history: 'replace' });
+    else await analyzeSnapshot({ liveFeatures: buf, history: 'replace', fov: { deg: CAMERA_DIAG_FOV, source: 'camera' } });
+  } finally { capturing = false; }
 }
 
 async function drawFileToSnapshot(file) {
@@ -450,7 +609,7 @@ async function handleFile(file) {
     await analyzeSnapshot({ history: current === 'intro' ? 'push' : 'replace', fov });
   } catch (e) {
     showToast(e.message || String(e), 4000);
-    show('intro', { history: 'replace' });
+    if (flow === 'combo') backToHub(); else show('intro', { history: 'replace' });
   }
 }
 
@@ -527,16 +686,19 @@ async function analyzeSnapshot({ liveFeatures = [], history: histMode = 'push', 
     const result = analyze(features);
     result.pts = pts;
     lastResult = result;
+    combo.face = result;
     await stepUI;
     await sleep(300);
-    if (current !== 'analyzing') return;   // 분석 중 사용자가 뒤로 감
+    if (current !== 'analyzing') { refreshFusion(); renderHub(); renderResult(result); return; }   // 분석 중 사용자가 뒤로 감
     renderResult(result);
-    show('result', { history: 'replace' });
+    refreshFusion();
+    if (flow === 'combo') { backToHub(); showToast('관상 분석이 끝났습니다.'); }
+    else show('result', { history: 'replace' });
     animateMeters();
     cardPromise = null;
     setTimeout(() => { if (lastResult === result) cardPromise = makeCardFile().catch(() => null); }, 400);
     const { yaw, pitch } = snapFeatures.pose;
-    if (!liveFeatures.length && (Math.abs(yaw) > 15 || Math.abs(pitch) > 15)) {
+    if (flow !== 'combo' && !liveFeatures.length && (Math.abs(yaw) > 15 || Math.abs(pitch) > 15)) {
       showToast('얼굴이 다소 돌아가 있어 자세를 보정했습니다. 정면 사진일수록 정확합니다.', 4200);
     }
   } catch (e) {
@@ -544,7 +706,7 @@ async function analyzeSnapshot({ liveFeatures = [], history: histMode = 'push', 
     console.error(e);
     if (current !== 'analyzing') return;
     showToast(e.message === 'NOFACE' ? '얼굴을 찾지 못했습니다. 정면 얼굴이 잘 보이는 사진으로 다시 시도해 주세요.' : '분석 중 문제가 발생했습니다: ' + (e.message || e), 4200);
-    show('intro', { history: 'replace' });
+    if (flow === 'combo') backToHub(); else show('intro', { history: 'replace' });
   }
 }
 
@@ -709,24 +871,6 @@ function drawResultOverlay(ctx, pts, color) {
 }
 
 // ── 결과 카드 (저장 · 공유) ──────────────────────────────────
-function wrapLines(ctx, text, maxW) {
-  const lines = [];
-  let line = '';
-  for (const word of text.split(/(\s+)/)) {
-    if (ctx.measureText(line + word).width <= maxW) { line += word; continue; }
-    if (line.trim()) lines.push(line.trim());
-    line = '';
-    for (const ch of word.trimStart()) {   // 한 단어가 너무 길면 글자 단위로 자름
-      if (ctx.measureText(line + ch).width > maxW) { lines.push(line); line = ch; } else line += ch;
-    }
-  }
-  if (line.trim()) lines.push(line.trim());
-  return lines;
-}
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
-}
-
 async function drawCard() {
   await document.fonts?.ready;
   const r = lastResult, t = r.type.primary, photo = $('#result-photo');
@@ -860,12 +1004,214 @@ $('#btn-install').addEventListener('click', async () => {
   $('#btn-install').classList.add('hidden');
 });
 
+
+// ── 손바닥 분석 ──────────────────────────────────────────────
+async function analyzePalmSnapshot({ history: histMode = 'push' } = {}) {
+  show('analyzing', { history: histMode });
+  $('#analyzing-steps').innerHTML = '';
+  const steps = ['손 모양을 찾는 중…', '손바닥을 똑바로 펴는 중…', '손금 선을 찾는 중…', '생명선·두뇌선·감정선을 읽는 중…'];
+  const stepUI = (async () => { for (const st of steps) { addStep(st); await sleep(600); } })();
+  try {
+    await loadHand();
+    await setHandMode('IMAGE');
+    let res;
+    try { res = engine.hand.detect(snapshot); }
+    catch (e) {
+      if (engine.handDelegate !== 'GPU') throw e;
+      await buildHand('CPU'); await setHandMode('IMAGE'); res = engine.hand.detect(snapshot);
+    }
+    const raw = res?.landmarks?.[0];
+    if (!raw) throw new Error('NOHAND');
+    const lm = raw.map(p => ({ x: p.x * snapshot.width, y: p.y * snapshot.height }));
+    if (!isPalmFacing(lm, res.handednesses?.[0]?.[0]?.categoryName)) throw new Error('BACKHAND');
+    await sleep(40);   // 안내 화면이 먼저 그려지게 한 번 양보
+    const img = snapshot.getContext('2d').getImageData(0, 0, snapshot.width, snapshot.height);
+    const analysis = analyzePalm(img, lm);
+    const reading = interpretPalm(analysis);
+    const palm = { analysis, reading, lm };
+    combo.palm = palm;
+    await stepUI;
+    await sleep(250);
+    V.renderPalm(palm, snapshot);
+    refreshFusion();
+    renderHub();
+    if (current !== 'analyzing') return;   // 분석 중 사용자가 뒤로 감
+    backToHub();
+    showToast(analysis.quality.level === 'poor' ? '손금 분석이 끝났습니다. 사진이 흐려 정확도가 낮을 수 있어요.' : '손금 분석이 끝났습니다.', 3600);
+  } catch (e) {
+    await stepUI;
+    console.error(e);
+    if (current !== 'analyzing') return;
+    showToast({
+      NOHAND: '손을 찾지 못했습니다. 손바닥 전체가 잘 보이는 사진으로 다시 시도해 주세요.',
+      BACKHAND: '손등이 찍혔습니다. 손바닥이 카메라를 향한 사진으로 다시 시도해 주세요.',
+    }[e.message] || ('손금 분석 중 문제가 발생했습니다: ' + (e.message || e)), 4600);
+    backToHub();
+  }
+}
+
+async function handlePalmFile(file) {
+  if (!file) return;
+  if (file.type && !file.type.startsWith('image/')) { showToast('이미지 파일만 분석할 수 있습니다.'); return; }
+  try {
+    await drawFileToSnapshot(file);
+    await analyzePalmSnapshot({ history: current === 'hub' ? 'push' : 'replace' });
+  } catch (e) {
+    showToast(e.message || String(e), 4000);
+    backToHub();
+  }
+}
+
+// ── 종합 분석 (허브 · 사주 입력 · 종합 결과) ────────────────
+/** 허브로 돌아간다. 허브에서 눌러 들어온 화면(카메라·분석 중·사주 입력)이면 뒤로 가기로 기록을 정리한다. */
+function backToHub() {
+  const v = history.state?.view;
+  if (v === 'analyzing' || v === 'camera' || v === 'sajuform') history.back();
+  else { renderHub(); show('hub', { history: 'replace' }); }
+}
+
+function refreshFusion() {
+  combo.fused = fuse({ face: combo.face || undefined, palm: combo.palm?.reading, saju: combo.saju?.reading });
+}
+function syncBackLinks() {
+  const has = !!combo.fused;
+  document.querySelectorAll('[data-back-combo]').forEach(el => el.classList.toggle('hidden', !has));
+  $('#combo-back-face').classList.toggle('hidden', !has);
+  $('#btn-to-combo').classList.toggle('hidden', has);
+}
+function sajuSummary(st) {
+  const { saju } = st, P = saju.pillars, pad = (n) => String(n).padStart(2, '0');
+  const ganji = [P.year, P.month, P.day, P.hour].map(x => (x ? x.hanja : '？？')).join(' ');
+  return `${saju.solar.year}.${pad(saju.solar.month)}.${pad(saju.solar.day)} · ${ganji}`;
+}
+function renderHub() {
+  const done = { saju: !!combo.saju, face: !!combo.face, palm: !!combo.palm };
+  for (const k of ['saju', 'face', 'palm']) {
+    $(`#step-${k}`).classList.toggle('done', done[k]);
+    $(`#hub-${k}-view`).classList.toggle('hidden', !done[k]);
+  }
+  $('#hub-saju-status').textContent = combo.saju ? `✓ ${sajuSummary(combo.saju)}` : '';
+  $('#hub-saju').textContent = combo.saju ? '✎ 다시 입력' : '입력하기';
+  $('#hub-face-status').textContent = combo.face ? `✓ ${combo.face.shape.primary.name} · ${combo.face.type.primary.name}` : '';
+  $('#hub-face-cam').textContent = combo.face ? '📷 다시 촬영' : '📷 촬영';
+  $('#hub-palm-status').textContent = combo.palm ? `✓ ${combo.palm.reading.shape.primary.name} · ${combo.palm.analysis.quality.level === 'poor' ? '사진이 흐림' : '선을 찾았어요'}` : '';
+  $('#hub-palm-cam').textContent = combo.palm ? '📷 다시 촬영' : '📷 촬영';
+  const n = Object.values(done).filter(Boolean).length;
+  $('#hub-go').disabled = n < 2;
+  $('#hub-hint').textContent = n < 2 ? `두 가지 이상 완료하면 종합 결과를 볼 수 있습니다. (${n}/3 완료)`
+    : n === 2 ? '한 가지를 더 하면 더 정확해지지만, 지금도 종합 결과를 볼 수 있습니다.' : '세 가지를 모두 완료했습니다!';
+}
+function openCombo() {
+  refreshFusion();
+  if (!combo.fused) return;
+  V.renderCombo(combo.fused, combo);
+  show('combo');
+}
+function goto(name) {
+  if (name === 'hub') { flow = 'combo'; renderHub(); show('hub'); }
+  else if (name === 'combo') { if (combo.fused) { V.renderCombo(combo.fused, combo); show('combo'); } else goto('hub'); }
+  else if (name === 'result') { if (lastResult) show('result'); }
+  else if (name === 'palm') { if (combo.palm) show('palm'); }
+  else if (name === 'saju') { if (combo.saju) show('saju'); }
+  else if (name === 'sajuform') show('sajuform');
+  else { if (name === 'intro') flow = 'single'; show(name); }
+}
+
+// 사주 입력 양식
+const sf = { form: $('#saju-form'), year: $('#saju-year'), month: $('#saju-month'), day: $('#saju-day'), time: $('#saju-time'), unknown: $('#saju-timeunknown'), leap: $('#saju-leap'), leapWrap: $('#leap-wrap'), err: $('#saju-error') };
+const sajuCalendar = () => (sf.form.elements.cal.value === 'lunar' ? 'lunar' : 'solar');
+function fillSelect(el, first, items) { el.innerHTML = `<option value="">${first}</option>` + items.map(([v, t]) => `<option value="${v}">${t}</option>`).join(''); }
+function updateSajuDays() {
+  const y = +sf.year.value || 2000, m = +sf.month.value || 1;
+  const max = sajuCalendar() === 'lunar' ? 30 : new Date(y, m, 0).getDate();
+  const cur = sf.day.value;
+  fillSelect(sf.day, '일', Array.from({ length: max }, (_, i) => [i + 1, `${i + 1}일`]));
+  if (cur && +cur <= max) sf.day.value = cur;
+}
+function initSajuForm() {
+  const thisYear = new Date().getFullYear();
+  fillSelect(sf.year, '년', Array.from({ length: thisYear - 1929 }, (_, i) => [thisYear - i, `${thisYear - i}년`]));
+  fillSelect(sf.month, '월', Array.from({ length: 12 }, (_, i) => [i + 1, `${i + 1}월`]));
+  updateSajuDays();
+  sf.year.addEventListener('change', updateSajuDays);
+  sf.month.addEventListener('change', updateSajuDays);
+  sf.form.addEventListener('change', (e) => {
+    if (e.target.name === 'cal') { sf.leapWrap.classList.toggle('hidden', sajuCalendar() !== 'lunar'); if (sajuCalendar() !== 'lunar') sf.leap.checked = false; updateSajuDays(); }
+  });
+  sf.unknown.addEventListener('change', () => { sf.time.disabled = sf.unknown.checked; if (!sf.unknown.checked && !sf.time.value) sf.time.value = '12:00'; });
+  sf.form.addEventListener('submit', (e) => { e.preventDefault(); submitSaju(); });
+  $('#saju-cancel').addEventListener('click', () => history.back());
+}
+function submitSaju() {
+  const fail = (msg) => { sf.err.textContent = msg; sf.err.classList.remove('hidden'); };
+  sf.err.classList.add('hidden');
+  const year = +sf.year.value, month = +sf.month.value, day = +sf.day.value;
+  if (!year || !month || !day) return fail('생년월일을 모두 선택해 주세요.');
+  let hour = null, minute = 0;
+  if (!sf.unknown.checked) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(sf.time.value || '');
+    if (!m) return fail('태어난 시간을 입력하거나 "시간을 몰라요"를 선택해 주세요.');
+    hour = +m[1]; minute = +m[2];
+  }
+  try {
+    const input = { year, month, day, calendar: sajuCalendar(), leap: sajuCalendar() === 'lunar' && sf.leap.checked, hour, minute };
+    const saju = computeSaju(input);
+    const st = { input, saju, reading: interpretSaju(saju) };
+    combo.saju = st;
+    V.renderSaju(st);
+    refreshFusion();
+    renderHub();
+    backToHub();
+    showToast('사주 계산이 끝났습니다.');
+  } catch (err) { fail(err.message || '사주를 계산하지 못했습니다.'); }
+}
+
+// 파일 저장 / 공유 (종합 결과 카드)
+async function shareOrDownload(file, { title, text }) {
+  if (IS_MOBILE && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title, text }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a'); a.href = url; a.download = file.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 15000);
+  showToast(IS_MOBILE ? '결과 카드를 다운로드했습니다. 사진첩이나 다운로드 폴더를 확인하세요.' : '결과 카드를 저장했습니다.');
+}
+async function saveComboCard() {
+  if (!combo.fused) return;
+  const btn = $('#combo-save'); btn.disabled = true;
+  try {
+    const canvas = await V.drawComboCard(combo.fused, combo, combo.palm ? $('#palm-photo') : null);
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9));
+    if (!blob) throw new Error('카드 이미지를 만들지 못했습니다.');
+    const file = new File([blob], `종합운세_${new Date().toISOString().slice(0, 10)}.jpg`, { type: 'image/jpeg' });
+    await shareOrDownload(file, { title: '관상·손금·사주 종합 결과', text: `나의 종합 운세는 ${combo.fused.avg}점, ${combo.fused.grade}!` });
+  } catch (e) { console.error(e); showToast('결과 카드를 만들지 못했습니다.'); }
+  finally { btn.disabled = false; }
+}
+
 // ── 이벤트 ───────────────────────────────────────────────────
-$('#btn-start').addEventListener('click', () => {
-  if (!CAN_LIVE) { captureInput.click(); return; }
-  show('camera');
-  openCamera();
-});
+$('#btn-start').addEventListener('click', () => { flow = 'single'; startCapture('face'); });
+$('#btn-combo').addEventListener('click', () => goto('hub'));
+$('#btn-to-combo').addEventListener('click', () => goto('hub'));
+document.addEventListener('click', (e) => { const b = e.target.closest('[data-goto]'); if (b) goto(b.dataset.goto); });
+
+// 종합 분석 허브
+$('#hub-saju').addEventListener('click', () => show('sajuform'));
+$('#hub-saju-view').addEventListener('click', () => show('saju'));
+$('#hub-face-cam').addEventListener('click', () => { flow = 'combo'; startCapture('face'); });
+$('#hub-face-up').addEventListener('click', () => { flow = 'combo'; captureKind = 'face'; fileInput.click(); });
+$('#hub-face-view').addEventListener('click', () => show('result'));
+$('#hub-palm-cam').addEventListener('click', () => { flow = 'combo'; startCapture('palm'); });
+$('#hub-palm-up').addEventListener('click', () => { flow = 'combo'; captureKind = 'palm'; palmInput.click(); });
+$('#hub-palm-view').addEventListener('click', () => show('palm'));
+$('#hub-go').addEventListener('click', openCombo);
+$('#hub-reset').addEventListener('click', () => { combo.face = combo.palm = combo.saju = combo.fused = null; renderHub(); syncBackLinks(); showToast('처음부터 다시 시작합니다.'); });
+$('#palm-retake').addEventListener('click', () => { flow = 'combo'; startCapture('palm', { replace: true }); });
+$('#combo-save').addEventListener('click', saveComboCard);
+for (const input of [palmInput, palmCaptureInput]) {
+  input.addEventListener('change', () => { const f = input.files?.[0]; input.value = ''; handlePalmFile(f); });
+}
 btnSwitch.addEventListener('click', async () => {
   const prev = facing;
   facing = facing === 'user' ? 'environment' : 'user';
@@ -882,7 +1228,7 @@ btnCapture.addEventListener('click', captureFromVideo);
 autoToggle.addEventListener('change', () => { resetHold(); try { localStorage.setItem('gwansang.auto', autoToggle.checked ? '1' : '0'); } catch { /* 무시 */ } });
 try { const saved = localStorage.getItem('gwansang.auto'); if (saved !== null) autoToggle.checked = saved === '1'; } catch { /* 무시 */ }
 
-$('#btn-upload').addEventListener('click', () => fileInput.click());
+$('#btn-upload').addEventListener('click', () => { flow = 'single'; captureKind = 'face'; fileInput.click(); });
 for (const input of [fileInput, captureInput]) {
   input.addEventListener('change', () => { const f = input.files?.[0]; input.value = ''; handleFile(f); });
 }
@@ -890,14 +1236,10 @@ document.addEventListener('dragover', e => { if (current !== 'intro') return; e.
 document.addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('drag'); });
 document.addEventListener('drop', e => {
   e.preventDefault(); document.body.classList.remove('drag');
-  if (current === 'intro') handleFile(e.dataTransfer?.files?.[0]);
+  if (current === 'intro') { flow = 'single'; handleFile(e.dataTransfer?.files?.[0]); }
 });
-$('#btn-retake').addEventListener('click', () => {
-  if (!CAN_LIVE) { captureInput.click(); return; }
-  show('camera', { history: 'replace' });
-  openCamera();
-});
-$('#btn-home').addEventListener('click', () => show('intro', { history: 'replace' }));
+$('#btn-retake').addEventListener('click', () => startCapture('face', { replace: true }));
+$('#btn-home').addEventListener('click', () => { flow = 'single'; show('intro', { history: 'replace' }); });
 $('#btn-save').addEventListener('click', saveCard);
 
 window.addEventListener('resize', relayoutCamera);
@@ -920,6 +1262,9 @@ if (!CAN_LIVE) {
 }
 if (IS_MOBILE && typeof navigator.canShare === 'function') $('#btn-save').textContent = '📤 결과 공유';
 setupMobileCard();
+initSajuForm();
+renderHub();
+syncBackLinks();
 if (navigator.connection?.saveData) setEngineStatus('데이터 절약 모드: 촬영을 시작할 때 판독 엔진(약 13MB)을 내려받습니다.');
 else loadEngine().catch(() => { /* 상태 문구로 안내됨 */ });
 
@@ -940,7 +1285,12 @@ window.gwansang = {
     return m;
   },
   get last() { return lastResult; },
+  get combo() { return combo; },
   get live() { return liveInfo; },
+  analyzePalmFromUrl: async (url) => { const blob = await (await fetch(url)).blob(); flow = 'combo'; await handlePalmFile(new File([blob], 'palm.jpg', { type: blob.type || 'image/jpeg' })); return combo.palm; },
+  setSaju: (input) => { const saju = computeSaju(input); combo.saju = { input, saju, reading: interpretSaju(saju) }; V.renderSaju(combo.saju); refreshFusion(); renderHub(); return combo.saju; },
+  openCombo,
+  goto,
   get geo() { return { ...geo }; },
   get engine() { return { source: engine.source?.name, delegate: engine.delegate, mode: engine.mode }; },
   env: { IS_MOBILE, CAN_LIVE },

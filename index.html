@@ -30,7 +30,7 @@
       <span class="seal" aria-hidden="true">相</span>
       <div>
         <h1>관상 판독기</h1>
-        <p class="tagline">얼굴에 새겨진 운명의 지도를 읽습니다</p>
+        <p class="tagline">얼굴·손·태어난 때에 새겨진 운명을 읽습니다</p>
       </div>
     </div>
     <button id="btn-install" class="chip hidden" type="button">⬇ 앱 설치</button>
@@ -52,7 +52,14 @@
           <button id="btn-upload" class="ghost" type="button">🖼 사진 업로드</button>
           <input id="file-input" type="file" accept="image/*" hidden>
           <input id="capture-input" type="file" accept="image/*" capture="user" hidden>
+          <input id="palm-input" type="file" accept="image/*" hidden>
+          <input id="palm-capture-input" type="file" accept="image/*" capture="environment" hidden>
         </div>
+        <button id="btn-combo" class="combo-cta" type="button">
+          <span class="combo-icons" aria-hidden="true">相 · 手 · 命</span>
+          <span class="combo-text"><b>관상 + 손금 + 사주 종합 분석</b><small>얼굴, 손바닥, 태어난 때를 함께 보고 하나로 엮어 풀이합니다</small></span>
+          <span class="combo-go" aria-hidden="true">›</span>
+        </button>
         <p id="engine-status" class="engine-status" aria-live="polite">판독 엔진 준비 중…</p>
         <p id="http-note" class="http-note hidden">이 주소는 HTTPS가 아니어서 실시간 촬영 가이드 없이 <b>휴대폰 기본 카메라</b>로 촬영합니다. 실시간 가이드를 쓰려면 <b>https://</b> 주소로 접속하세요.</p>
         <ul class="tips">
@@ -83,6 +90,7 @@
     <!-- 카메라 화면 (휴대폰에서는 전체 화면) -->
     <section id="view-camera" class="panel cam hidden" aria-label="얼굴 촬영">
       <div id="cam-stage" class="cam-stage">
+        <div id="cam-kind" class="cam-kind" aria-hidden="true">관상 촬영</div>
         <!-- 영상과 윤곽선을 한 겹으로 묶어 같은 크기·같은 반전으로 배치 (app.js layoutCamera) -->
         <div id="cam-layer" class="cam-layer">
           <video id="video" autoplay playsinline muted disablepictureinpicture></video>
@@ -177,12 +185,211 @@
       <h3 class="sec"><span>總評</span>총평</h3>
       <div id="summary" class="summary"></div>
 
+      <button id="btn-to-combo" class="next-card" type="button">
+        <span class="next-icons" aria-hidden="true">手 · 命</span>
+        <span class="next-text"><b>손금과 사주도 함께 볼까요?</b><small>세 가지를 하나로 엮은 종합 분석을 받아 보세요</small></span>
+        <span class="combo-go" aria-hidden="true">›</span>
+      </button>
+      <div id="combo-back-face" class="back-combo hidden"><button class="ghost" type="button" data-goto="combo">↩ 종합 결과로 돌아가기</button></div>
+
       <p class="disclaimer">※ 오락용 결과입니다. 얼굴은 타고나는 것이 아니라 살아온 마음이 새겨지는 것이라 했습니다.</p>
 
       <div class="result-bar">
         <button id="btn-retake" class="primary" type="button">📷 다시 촬영</button>
         <button id="btn-save" class="ghost" type="button">💾 결과 저장</button>
         <button id="btn-home" class="ghost" type="button" aria-label="처음으로">⌂</button>
+      </div>
+    </section>
+
+    <!-- 종합 분석 허브 -->
+    <section id="view-hub" class="panel hidden hub">
+      <h2 class="hub-title">관상 · 손금 · 사주 종합 분석</h2>
+      <p class="hub-lead">세 가지를 모두 하면 가장 정확하고, <b>두 가지만 해도</b> 종합해 드립니다. 순서는 상관없습니다.</p>
+      <div class="hub-steps">
+        <article class="step" id="step-saju">
+          <div class="step-num">命</div>
+          <div class="step-body">
+            <h3>사주 <small>四柱八字</small></h3>
+            <p class="step-desc">생년월일과 태어난 시간으로 여덟 글자를 세웁니다.</p>
+            <p id="hub-saju-status" class="step-status"></p>
+            <div class="step-btns"><button id="hub-saju" class="primary sm" type="button">입력하기</button><button id="hub-saju-view" class="ghost sm hidden" type="button">결과 보기</button></div>
+          </div>
+        </article>
+        <article class="step" id="step-face">
+          <div class="step-num">相</div>
+          <div class="step-body">
+            <h3>관상 <small>얼굴</small></h3>
+            <p class="step-desc">정면 얼굴을 촬영하거나 사진을 올립니다.</p>
+            <p id="hub-face-status" class="step-status"></p>
+            <div class="step-btns"><button id="hub-face-cam" class="primary sm" type="button">📷 촬영</button><button id="hub-face-up" class="ghost sm" type="button">🖼 사진</button><button id="hub-face-view" class="ghost sm hidden" type="button">결과 보기</button></div>
+          </div>
+        </article>
+        <article class="step" id="step-palm">
+          <div class="step-num">手</div>
+          <div class="step-body">
+            <h3>손금 <small>손바닥</small></h3>
+            <p class="step-desc">손가락을 펴고 손바닥이 잘 보이게 촬영합니다. 밝은 곳에서, 초점이 맞게 찍어 주세요.</p>
+            <p id="hub-palm-status" class="step-status"></p>
+            <div class="step-btns"><button id="hub-palm-cam" class="primary sm" type="button">📷 촬영</button><button id="hub-palm-up" class="ghost sm" type="button">🖼 사진</button><button id="hub-palm-view" class="ghost sm hidden" type="button">결과 보기</button></div>
+          </div>
+        </article>
+      </div>
+      <div class="hub-actions">
+        <button id="hub-go" class="primary big" type="button" disabled>종합 결과 보기</button>
+        <p id="hub-hint" class="hub-hint">두 가지 이상 완료하면 종합 결과를 볼 수 있습니다.</p>
+        <button id="hub-reset" class="link" type="button">처음부터 다시</button>
+      </div>
+      <p class="disclaimer">※ 사진과 생년월일은 이 기기 안에서만 처리되며 저장·전송되지 않습니다. 오락용 콘텐츠입니다.</p>
+    </section>
+
+    <!-- 사주 입력 -->
+    <section id="view-sajuform" class="panel hidden sajuform">
+      <h2 class="hub-title">사주 정보 입력</h2>
+      <form id="saju-form" autocomplete="off" novalidate>
+        <fieldset class="seg">
+          <legend>달력</legend>
+          <label><input type="radio" name="cal" value="solar" checked><span>양력</span></label>
+          <label><input type="radio" name="cal" value="lunar"><span>음력</span></label>
+        </fieldset>
+        <div class="field">
+          <label for="saju-year">생년월일</label>
+          <div class="field-row">
+            <select id="saju-year" aria-label="태어난 해"></select>
+            <select id="saju-month" aria-label="태어난 달"></select>
+            <select id="saju-day" aria-label="태어난 날"></select>
+          </div>
+          <label id="leap-wrap" class="check hidden"><input type="checkbox" id="saju-leap"><span>윤달(閏月)입니다</span></label>
+        </div>
+        <div class="field">
+          <label for="saju-time">태어난 시간</label>
+          <div class="field-row time-row">
+            <input id="saju-time" type="time" value="12:00" disabled aria-label="태어난 시각">
+            <label class="check"><input type="checkbox" id="saju-timeunknown" checked><span>시간을 몰라요</span></label>
+          </div>
+          <p class="field-hint">시간을 모르면 시주를 뺀 여섯 글자로 풀이하며, 정확도는 조금 낮아집니다. 출생 시각은 한국 표준시(24시간제)로 입력하세요.</p>
+        </div>
+        <p id="saju-error" class="form-error hidden" role="alert"></p>
+        <div class="form-actions">
+          <button type="submit" class="primary big">사주 보기</button>
+          <button type="button" class="ghost" id="saju-cancel">취소</button>
+        </div>
+      </form>
+      <p class="disclaimer">※ 생년월일은 이 기기 안에서 계산에만 쓰이고 저장·전송되지 않습니다.</p>
+    </section>
+
+    <!-- 사주 결과 -->
+    <section id="view-saju" class="panel hidden result">
+      <h2 class="hub-title">사주팔자 <small>四柱八字</small></h2>
+      <p id="saju-meta" class="saju-meta"></p>
+      <div id="pillars" class="pillars" role="table" aria-label="사주 여덟 글자"></div>
+      <p id="saju-notes" class="note hidden"></p>
+
+      <div class="type-card daymaster">
+        <div class="type-head">
+          <div id="dm-seal" class="type-seal">庚</div>
+          <div>
+            <div class="type-eyebrow">일간(日干) · 나를 나타내는 글자</div>
+            <h2 id="dm-name">경금(庚金)</h2>
+            <p id="dm-image" class="type-shape"></p>
+          </div>
+        </div>
+        <p id="dm-text" class="type-desc"></p>
+        <p id="dm-advice" class="shape-advice"></p>
+      </div>
+
+      <h3 class="sec"><span>五行</span>오행의 분포</h3>
+      <div id="el-bars" class="el-bars"></div>
+      <div id="el-texts" class="el-texts"></div>
+
+      <h3 class="sec"><span>十星</span>기운의 쓰임</h3>
+      <div id="gods" class="gods"></div>
+
+      <h3 class="sec"><span>五運</span>사주로 본 다섯 가지 운</h3>
+      <div id="saju-fortunes" class="fortunes"></div>
+
+      <p class="disclaimer">※ 사주는 태어난 해·달·날·시를 간지(干支)로 바꿔 풀이하는 전통 명리학이며, 오락용으로 간략히 풀이한 결과입니다.</p>
+      <div class="back-combo hidden" data-back-combo><button class="ghost" type="button" data-goto="combo">↩ 종합 결과로 돌아가기</button></div>
+      <div class="result-bar">
+        <button class="primary" type="button" data-goto="hub">종합 분석</button>
+        <button class="ghost" type="button" data-goto="sajuform">✎ 다시 입력</button>
+        <button class="ghost" type="button" data-goto="intro" aria-label="처음으로">⌂</button>
+      </div>
+    </section>
+
+    <!-- 손금 결과 -->
+    <section id="view-palm" class="panel hidden result">
+      <h2 class="hub-title">손금 <small>手相</small></h2>
+      <div class="result-top">
+        <div class="photo-col">
+          <div class="photo-wrap"><canvas id="palm-photo" role="img" aria-label="찾은 손금 선이 표시된 손바닥 사진"></canvas></div>
+          <div id="palm-legend" class="palm-legend"></div>
+          <p id="palm-note" class="photo-note"></p>
+        </div>
+        <div class="type-card">
+          <div class="type-head">
+            <div id="hand-seal" class="type-seal">火</div>
+            <div>
+              <div class="type-eyebrow">손 모양 · 五行手</div>
+              <h2 id="hand-name">화형수(火形手)</h2>
+              <p id="hand-shape" class="type-shape"></p>
+            </div>
+          </div>
+          <div class="type-mix-wrap">
+            <div id="hand-mix" class="type-mix"></div>
+            <div id="hand-mix-legend" class="type-mix-legend"></div>
+          </div>
+          <p id="hand-text" class="type-desc"></p>
+          <p id="hand-fingers" class="hand-fingers"></p>
+        </div>
+      </div>
+      <div id="palm-quality" class="note hidden"></div>
+
+      <h3 class="sec"><span>主線</span>선별 풀이</h3>
+      <div id="palm-readings" class="parts"></div>
+
+      <h3 class="sec"><span>五運</span>손금으로 본 다섯 가지 운</h3>
+      <div id="palm-fortunes" class="fortunes"></div>
+
+      <p class="disclaimer">※ 손금 선은 사진의 밝기·초점·손의 각도에 따라 부정확하게 찾아질 수 있습니다. 오락용 참고 결과입니다.</p>
+      <div class="back-combo hidden" data-back-combo><button class="ghost" type="button" data-goto="combo">↩ 종합 결과로 돌아가기</button></div>
+      <div class="result-bar">
+        <button class="primary" type="button" data-goto="hub">종합 분석</button>
+        <button class="ghost" type="button" id="palm-retake">📷 재촬영</button>
+        <button class="ghost" type="button" data-goto="intro" aria-label="처음으로">⌂</button>
+      </div>
+    </section>
+
+    <!-- 종합 결과 -->
+    <section id="view-combo" class="panel hidden result combo">
+      <div class="combo-hero">
+        <div class="combo-hero-label">관상 · 손금 · 사주 종합</div>
+        <div class="combo-score"><b id="combo-avg">0</b><span>점</span></div>
+        <div id="combo-grade" class="combo-grade"></div>
+        <div id="combo-sources" class="combo-sources"></div>
+      </div>
+
+      <h3 class="sec"><span>五行</span>세 방면의 기운</h3>
+      <div id="combo-elems" class="combo-elems"></div>
+      <div id="combo-rels" class="combo-rels"></div>
+
+      <h3 class="sec"><span>五運</span>다섯 가지 운 종합</h3>
+      <div id="combo-fortunes" class="combo-fortunes"></div>
+
+      <h3 class="sec"><span>總評</span>종합 총평</h3>
+      <div id="combo-summary" class="summary"></div>
+
+      <h3 class="sec"><span>詳細</span>자세히 보기</h3>
+      <div class="detail-links">
+        <button class="ghost" type="button" data-goto="result" id="dl-face">相 관상 결과</button>
+        <button class="ghost" type="button" data-goto="palm" id="dl-palm">手 손금 결과</button>
+        <button class="ghost" type="button" data-goto="saju" id="dl-saju">命 사주 결과</button>
+      </div>
+
+      <p class="disclaimer">※ 관상·손금·사주는 서로 다른 전통 이론을 오락용으로 엮은 결과이며 과학적 근거가 없습니다.</p>
+      <div class="result-bar">
+        <button class="primary" type="button" data-goto="hub">↺ 다시 하기</button>
+        <button class="ghost" type="button" id="combo-save">💾 저장</button>
+        <button class="ghost" type="button" data-goto="intro" aria-label="처음으로">⌂</button>
       </div>
     </section>
   </main>
