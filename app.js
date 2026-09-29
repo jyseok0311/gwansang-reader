@@ -516,6 +516,13 @@ async function analyzeSnapshot({ liveFeatures = [], history: histMode = 'push', 
       features = correctPerspective(features, D);
       features.fovSource = fov.source;
     }
+    // 업로드 사진은 표정 검사를 거치지 않으므로, 웃는 얼굴이면 기준값을 만들 때처럼 입 너비를 보정한다
+    // (웃으면 입꼬리가 옆으로 당겨져 입이 실제보다 넓게 잡힌다)
+    if (!liveFeatures.length) {
+      const cats = res.faceBlendshapes?.[0]?.categories;
+      const smile = (blend(cats, 'mouthSmileLeft') + blend(cats, 'mouthSmileRight')) / 2;
+      if (smile > 0.5) { features = { ...features, mouthWidth: features.mouthWidth / 1.2, smileCorrected: true }; }
+    }
     features.frames = liveFeatures.length + 1;
     const result = analyze(features);
     result.pts = pts;
@@ -606,13 +613,15 @@ function renderResult(r) {
 
   // 촬영 거리와 원근 보정 안내
   const fe = r.features;
-  $('#photo-note').textContent = fe.distanceCm
+  const smileNote = fe.smileCorrected ? ' 웃는 얼굴이라 입 너비도 무표정 기준으로 보정했습니다.' : '';
+  $('#photo-note').textContent = (fe.distanceCm
     ? `촬영 거리 약 ${fe.distanceCm}cm로 추정해 원근 왜곡을 보정했습니다.`
     : fe.perspectiveSkip === 'cropped'
       ? '잘라낸 사진이라 촬영 화각을 알 수 없어 원근 보정 없이 분석했습니다. 셀카라면 카메라로 직접 찍을 때 더 정확합니다.'
-      : '사진에 촬영 정보가 없어 원근 보정 없이 분석했습니다. 셀카라면 카메라로 직접 찍을 때 더 정확합니다.';
+      : '사진에 촬영 정보가 없어 원근 보정 없이 분석했습니다. 셀카라면 카메라로 직접 찍을 때 더 정확합니다.') + smileNote;
   $('#type-strengths').innerHTML = t.strengths.map(x => `<li>${x}</li>`).join('');
   $('#type-career').textContent = t.career;
+  $('#type-caution').textContent = t.caution;
   $('#type-lucky').textContent = `${t.lucky.color} · ${t.lucky.direction} · ${t.lucky.season}`;
   $('#type-secondary').textContent = `${type.secondary.name} 기운 겸비`;
   $('#type-mix').innerHTML = type.weights.map(w => `<span class="mix" style="--c:${w.type.color};--w:${w.pct}%" title="${w.type.name} ${w.pct}%"></span>`).join('');

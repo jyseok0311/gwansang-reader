@@ -441,17 +441,165 @@ export function analyzeFortunes(f, samjeong) {
 }
 
 // ── 총평 ─────────────────────────────────────────────────────
-export function composeSummary(type, samjeong, fortune, shape) {
-  const t = type.primary;
-  const s = type.secondary;
-  const b = fortune.best;
-  const w = fortune.weakest;
+// 사람마다 달라지도록 ① 윤곽·오행 조합 ② 가장 두드러진 부위 두 곳 ③ 삼정 흐름
+// ④ 가장 밝은 운과 조용한 운의 조합 ⑤ 등급·윤곽·오행별 마무리로 문장을 엮는다.
+
+/** 받침 유무에 따라 조사를 고른다. josa('코', '이', '가') → '코가' */
+export function josa(word, withBatchim, without) {
+  const base = word.replace(/\s*\([^)]*\)$/, '');   // '불(火)' 처럼 괄호로 끝나면 괄호 앞 글자로 판단
+  const ch = base.charCodeAt(base.length - 1);
+  const has = ch >= 0xAC00 && ch <= 0xD7A3 && (ch - 0xAC00) % 28 !== 0;
+  return word + (has ? withBatchim : without);
+}
+/** 표준정규분포 누적확률 (근사) */
+function normCdf(z) {
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const d = 0.3989423 * Math.exp(-z * z / 2);
+  const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+  return z > 0 ? 1 - p : p;
+}
+
+// 오행 상생(生)·상극(剋) 관계: 앞 기운이 뒤 기운을 살리거나 누른다
+const ELEMENT = { wood: '나무(木)', fire: '불(火)', earth: '흙(土)', metal: '쇠(金)', water: '물(水)' };
+const SAENG = { wood: 'fire', fire: 'earth', earth: 'metal', metal: 'water', water: 'wood' };
+const GEUK = { wood: 'earth', earth: 'water', water: 'fire', fire: 'metal', metal: 'wood' };
+const SAENG_IMAGE = {
+  wood: '나무가 불을 지피듯 재능이 열정으로 타오르는', fire: '불이 재를 남겨 흙을 기름지게 하듯 열정이 실속으로 쌓이는',
+  earth: '흙 속에서 쇠가 나듯 꾸준함이 귀한 결실을 맺는', metal: '바위틈에서 샘이 솟듯 원칙 속에서 지혜가 흘러나오는',
+  water: '물이 나무를 키우듯 지혜가 성장의 밑거름이 되는',
+};
+const GEUK_IMAGE = {
+  wood: '나무뿌리가 흙을 붙잡듯', earth: '둑이 물길을 다스리듯', water: '물이 불길을 잠재우듯',
+  fire: '불이 쇠를 녹여 다듬듯', metal: '도끼가 나무를 다듬듯',
+};
+// 기운마다의 덕목: 두 기운의 관계를 사람마다 다른 말로 풀어 준다
+const VIRTUE = { wood: '성장', fire: '열정', earth: '신용', metal: '결단', water: '지혜' };
+function elementRelation(pk, sk) {
+  const P = ELEMENT[pk], S = ELEMENT[sk], vp = VIRTUE[pk], vs = VIRTUE[sk];
+  if (SAENG[pk] === sk) return `${josa(P, '이', '가')} ${josa(S, '을', '를')} 살리는 상생의 조합으로, ${SAENG_IMAGE[pk]} 상입니다. 타고난 ${josa(vp, '이', '가')} ${josa(vs, '으로', '로')} 이어지니 가진 것을 나눌수록 복이 커집니다.`;
+  if (SAENG[sk] === pk) return `${josa(S, '이', '가')} ${josa(P, '을', '를')} 받쳐 주는 상생의 조합으로, ${SAENG_IMAGE[sk]} 상입니다. ${josa(vs, '이', '가')} ${josa(vp, '을', '를')} 북돋아 주니 주변의 도움으로 힘을 얻습니다.`;
+  if (GEUK[pk] === sk) return `${josa(P, '이', '가')} ${josa(S, '을', '를')} 누르는 상극의 조합으로, ${GEUK_IMAGE[pk]} 스스로를 다잡는 힘이 강합니다. ${josa(vp, '으로', '로')} ${josa(vs, '을', '를')} 다스리니 욕심에 휘둘려 큰일을 그르치지 않습니다.`;
+  return `${josa(S, '이', '가')} ${josa(P, '을', '를')} 견제하는 상극의 조합으로, ${GEUK_IMAGE[sk]} 긴장 속에서 단련되며 크는 상입니다. ${josa(vs, '이', '가')} ${josa(vp, '을', '를')} 담금질하니 어려움을 겪을수록 단단해집니다.`;
+}
+
+// 부위별로 가장 두드러질 때의 이름·방향·짧은 풀이 [작은 쪽, 큰 쪽]
+const PART_TRAITS = {
+  forehead: { noun: '이마', adj: ['좁은', '넓은'], brief: ['머리보다 몸으로 부딪혀 길을 여는 실행가입니다', '지혜가 깊고 윗사람의 덕을 타고났습니다'] },
+  brow: { noun: '눈썹', adj: ['곧게 뻗은', '높이 솟은'], brief: ['한번 정한 일은 끝까지 밀고 가는 뚝심이 있습니다', '감성과 표현력이 풍부해 예술적 재능이 엿보입니다'] },
+  glabella: { noun: '미간', adj: ['좁은', '넓은'], brief: ['집중력과 분석력이 날카롭습니다', '낙천적이고 마음의 그릇이 큽니다'] },
+  eyes: { noun: '눈', adj: ['작은', '큰'], brief: ['눈매가 깊고 예리해 쉽게 속지 않고 실속을 챙깁니다', '감수성이 풍부하고 사람을 끄는 매력이 있습니다'] },
+  eyeTilt: { noun: '눈꼬리', adj: ['내려간', '올라간'], brief: ['온화하고 정이 많아 사람들이 쉽게 마음을 엽니다', '승부욕과 카리스마가 강해 목표를 향해 밀고 갑니다'] },
+  eyelid: { noun: '눈두덩', adj: ['좁은', '넓은'], brief: ['판단이 빠르고 행동이 민첩합니다', '느긋하고 집안과 재산의 복이 두텁습니다'] },
+  nose: { noun: '콧방울', adj: ['좁은', '넓은'], brief: ['돈을 계획적으로 다루고 낭비가 적습니다', '재물을 끌어당기는 힘이 강합니다'] },
+  philtrum: { noun: '인중', adj: ['짧은', '긴'], brief: ['순발력이 좋고 젊은 기운이 오래갑니다', '인내심과 생명력이 강해 위기를 잘 견딥니다'] },
+  mouth: { noun: '입', adj: ['작은', '큰'], brief: ['말을 아끼고 비밀을 잘 지켜 신뢰를 얻습니다', '대범하고 사교적이라 사람을 모읍니다'] },
+  lips: { noun: '입술', adj: ['얇은', '도톰한'], brief: ['말이 논리적이고 판단이 냉철합니다', '정이 깊고 애정운이 따뜻합니다'] },
+  jaw: { noun: '턱', adj: ['갸름한', '넓은'], brief: ['섬세하고 변화에 유연하게 적응합니다', '지도력이 있고 말년의 복이 큽니다'] },
+  symmetry: { noun: '좌우 균형', adj: ['개성 있는', '정교한'], brief: ['다면적인 매력으로 상황마다 다른 얼굴을 보여 줍니다', '심신이 안정되어 판단이 한결같습니다'] },
+};
+function distinctiveParts(parts) {
+  // 좌우 균형은 고개가 조금만 돌아가도 흔들리는 측정값이라 두드러짐을 덜 반영한다
+  const weight = (p) => Math.abs(p.value) * (p.id === 'symmetry' ? 0.7 : 1);
+  const ranked = parts.filter(p => PART_TRAITS[p.id] && Number.isFinite(p.value)).sort((a, b) => weight(b) - weight(a));
+  const [a, b] = ranked;
+  const phrase = (p) => {
+    const t = PART_TRAITS[p.id], hi = p.value >= 0 ? 1 : 0;
+    const pct = Math.max(1, Math.round((hi ? 1 - normCdf(p.value) : normCdf(p.value)) * 100));
+    // 표본이 작아 정확한 백분율 대신 대략적인 빈도로 말한다
+    const rarity = pct <= 5 ? '스무 명 중 한 명꼴로 드물게' : pct <= 10 ? '열 명 중 한 명꼴로' : pct <= 20 ? '다섯 명 중 한 명꼴로' : '눈에 띄게';
+    return { t, hi, pct, rarity, noun: t.noun, adj: t.adj[hi], brief: t.brief[hi] };
+  };
+  const A = phrase(a), B = phrase(b);
+  if (Math.abs(a.value) < 0.5) {
+    return '어느 한 부위가 튀지 않고 오관이 고르게 어우러진 얼굴입니다. 두루 균형 잡힌 상은 한쪽으로 치우치지 않아 큰 굴곡 없이 오래 복을 누립니다.';
+  }
+  return `얼굴에서 가장 두드러진 곳은 ${A.noun}입니다. ${josa(A.noun, '이', '가')} ${A.rarity} ${A.adj} 편으로, ${A.brief}. `
+    + `그다음으로 눈에 띄는 ${josa(B.noun, '은', '는')} ${B.adj} 편인데, ${B.brief}.`;
+}
+
+// 삼정: 가장 두터운 시기 → 가장 가벼운 시기 조합별 흐름
+const SAMJEONG_FLOW = {
+  'upper>lower': '젊어서 일찍 빛을 보는 선발형 흐름이니, 말년을 위한 준비를 남보다 일찍 시작하면 좋습니다.',
+  'upper>middle': '초년의 배움과 말년의 여유 사이에 중년의 고비가 있으니, 한창때에 무리하지 않는 것이 관건입니다.',
+  'middle>upper': '젊은 날의 수고가 중년에 크게 보상받는 흐름입니다. 초년의 고생은 밑거름이 됩니다.',
+  'middle>lower': '중년에 정점을 찍는 흐름이니, 그때 거둔 것을 말년까지 지키는 지혜가 필요합니다.',
+  'lower>upper': '늦게 필수록 크게 피는 대기만성의 흐름입니다. 조급해하지 않으면 말년이 가장 풍요롭습니다.',
+  'lower>middle': '중년의 굴곡을 지나면 말년에 복이 모이는 흐름입니다. 사오십 대를 잘 넘기면 이후가 편안합니다.',
+};
+function samjeongFlow(samjeong) {
+  const st = [...samjeong.stages].sort((a, b) => b.z - a.z);
+  const hi = st[0], lo = st[2];
+  const period = (x) => x.period.split(' · ')[0];
+  if (samjeong.spread <= POP.samjeongSpread[0] * 0.7) {
+    return {
+      upper: '삼정이 고르게 균형을 이룬 가운데 이마 쪽이 조금 더 두텁습니다. 초년에 쌓은 배움이 평생의 밑천이 되어 크게 기울지 않는 삶을 삽니다.',
+      middle: '삼정이 고르게 균형을 이룬 가운데 눈썹에서 코끝까지가 조금 더 두텁습니다. 한창때의 노력이 가장 크게 보답받고, 앞뒤로도 흐름이 순탄합니다.',
+      lower: '삼정이 고르게 균형을 이룬 가운데 인중에서 턱까지가 조금 더 두텁습니다. 나이가 들수록 삶이 편안해지고 곁에 사람이 늘어납니다.',
+    }[hi.key];
+  }
+  return `삼정 가운데 ${period(hi)}을 뜻하는 ${josa(hi.name, '이', '가')} 두텁고, ${period(lo)}을 뜻하는 ${josa(lo.name, '이', '가')} 상대적으로 가볍습니다. ${SAMJEONG_FLOW[`${hi.key}>${lo.key}`]}`;
+}
+
+// 다섯 운: 가장 밝은 운 × 가장 조용한 운 조합별 풀이
+const FORTUNE_PAIR = {
+  'wealth>love': '재물은 잘 모이나 정은 아끼는 편이니, 가까운 사람에게 쓰는 돈이 오히려 복을 부릅니다.',
+  'wealth>career': '돈복이 이름보다 앞서니, 자리보다 실속을 좇는 길이 잘 맞습니다.',
+  'wealth>health': '재물을 모으는 힘이 강한 만큼 몸을 돌보는 일은 뒤로 밀리기 쉬우니 건강에 먼저 투자하세요.',
+  'wealth>social': '혼자 힘으로 재물을 일구는 상이라, 믿을 만한 사람 몇만 곁에 두어도 충분합니다.',
+  'love>wealth': '정이 넘쳐 베풀기를 좋아하니, 지갑은 조금 더 단단히 여미세요.',
+  'love>career': '사랑과 사람을 얻는 복이 커서, 일보다 관계에서 행복을 찾는 상입니다.',
+  'love>health': '마음을 쏟는 만큼 기운이 빠지기 쉬우니, 남보다 스스로를 먼저 챙기세요.',
+  'love>social': '넓은 인맥보다 깊은 한 사람과의 인연이 인생을 바꾸는 상입니다.',
+  'career>wealth': '명예가 재물보다 먼저 오는 상이라, 이름을 얻고 나면 재물은 뒤따라옵니다.',
+  'career>love': '일에 몰두하는 만큼 곁의 사람을 놓치기 쉬우니, 마음 표현을 아끼지 마세요.',
+  'career>health': '책임감이 강해 무리하기 쉬우니, 쉬는 시간을 일정에 먼저 넣으세요.',
+  'career>social': '실력으로 인정받는 상이라, 사교보다 성과가 사람을 모읍니다.',
+  'health>wealth': '타고난 활력이 가장 큰 재산이니, 그 힘으로 꾸준히 벌면 재물은 따라옵니다.',
+  'health>love': '스스로 서는 힘이 강해 기대는 일이 적으니, 가끔은 마음을 기대 보세요.',
+  'health>career': '지치지 않는 체력이 있으니, 한 분야를 오래 밀고 가면 자리가 생깁니다.',
+  'health>social': '혼자서도 단단한 사람이라, 먼저 손을 내밀면 귀인을 만납니다.',
+  'social>wealth': '사람이 모이는 만큼 씀씀이도 커지기 쉬우니, 나가는 돈을 살피세요.',
+  'social>love': '많은 사람과 두루 잘 지내지만, 한 사람에게 깊이 마음을 여는 데는 시간이 걸립니다.',
+  'social>career': '사람을 얻는 재주가 뛰어나니, 혼자 하는 일보다 함께하는 일에서 이름이 납니다.',
+  'social>health': '사람 만나는 즐거움에 쉴 틈이 줄기 쉬우니, 혼자만의 시간을 지키세요.',
+};
+function fortuneStory(fortune) {
+  const b = fortune.best, w = fortune.weakest;
+  if (b.score - w.score < 8) {
+    return `다섯 운이 ${w.score}~${b.score}점으로 고르게 모여 어느 한쪽에 치우치지 않는 상입니다. 그중에서도 ${josa(b.name, '이', '가')} 가장 밝으니 이 방면에서 먼저 기회가 옵니다.`;
+  }
+  return `다섯 운 가운데 ${josa(b.name, '이', '가')} ${b.score}점으로 가장 밝고, ${josa(w.name, '이', '가')} ${w.score}점으로 가장 조용합니다. ${FORTUNE_PAIR[`${b.key}>${w.key}`]}`;
+}
+
+// 마무리: 주된 오행별 한마디
+// 주된 오행 × 등급(상격·중상격·중격)별 마무리 한마디
+const ELEMENT_MOTTO = {
+  wood: ['이미 큰 그늘을 드리운 나무이니, 그 그늘에 사람을 쉬게 할 때 복이 배로 늘어납니다.',
+    '곧게 자라는 나무처럼 서두르지 않으면 반드시 큰 그늘을 드리웁니다.',
+    '겨울나무가 봄을 기다리듯, 지금 다지는 뿌리가 곧 싹을 틔웁니다.'],
+  fire: ['활활 타오르는 불처럼 이미 주위를 밝히는 상이니, 불씨를 나누면 온기가 오래갑니다.',
+    '불씨를 오래 지키는 사람이 결국 가장 밝게 빛납니다.',
+    '작은 불씨도 바람을 만나면 들불이 되니, 기회가 오는 방향으로 몸을 돌리세요.'],
+  earth: ['기름진 땅처럼 이미 많은 것을 품은 상이니, 거둔 것을 나누면 이듬해 더 큰 수확이 옵니다.',
+    '넉넉한 땅이 모든 것을 기르듯, 베푼 만큼 돌아옵니다.',
+    '묵은 땅도 갈아엎으면 옥토가 되니, 익숙한 방식을 한 번 바꿔 보세요.'],
+  metal: ['잘 벼린 보검처럼 이미 날이 선 상이니, 칼집에 넣을 때를 아는 지혜가 복을 지킵니다.',
+    '잘 벼린 쇠처럼 원칙은 지키되 날은 부드럽게 다듬으세요.',
+    '거친 쇠도 두드릴수록 명검이 되니, 지금의 담금질을 두려워하지 마세요.'],
+  water: ['큰 강처럼 이미 많은 것을 실어 나르는 상이니, 물길을 넓게 열어 두면 복이 모입니다.',
+    '물이 바위를 돌아가듯 유연함이 가장 큰 힘이 됩니다.',
+    '고인 물도 길을 만나면 흐르니, 작은 변화 하나가 운의 물꼬를 틉니다.'],
+};
+
+export function composeSummary(type, samjeong, fortune, shape, parts) {
+  const t = type.primary, s = type.secondary, sh = shape.primary;
   const grade = gradeLabel(fortune.avg).replace(/ (.+)$/, '($1)');
   return [
-    `얼굴 윤곽은 십자면상의 ${shape.primary.name}으로 ${shape.primary.shape}입니다. 기질은 ${t.name}을 바탕으로 ${s.name}의 기운이 섞여, 관상학에서는 「${t.keyword}」의 기질을 타고났다고 봅니다.`,
-    samjeong.balance,
-    `다섯 운 가운데 ${b.name}이 가장 밝게 빛나(${b.score}점) 이 방면에서 남보다 유리한 흐름을 타고 있습니다. ${w.name}(${w.score}점)은 약점이 아니라 다듬을수록 크게 자라는 자리입니다. ${t.caution}`,
-    `종합하면 ${grade}에 해당하며, ${shape.primary.closing} 얼굴은 살아온 마음이 새겨지는 것이니 오늘의 표정이 내일의 관상을 만듭니다.`,
+    `얼굴 윤곽은 십자면상의 ${sh.name}으로 ${sh.shape}입니다. 기질은 ${t.name}에 ${s.name}이 섞였는데, ${elementRelation(t.key, s.key)}`,
+    distinctiveParts(parts),
+    samjeongFlow(samjeong),
+    fortuneStory(fortune),
+    `종합하면 ${grade}에 해당하며, ${sh.closing} ${ELEMENT_MOTTO[t.key][fortune.avg >= 81 ? 0 : fortune.avg >= 74 ? 1 : 2]}`,
   ];
 }
 
@@ -463,6 +611,6 @@ export function analyze(f) {
   const palaces = analyzePalaces(f);
   const fortune = analyzeFortunes(f, samjeong);
   const shape = classifySipja(f);
-  const summary = composeSummary(type, samjeong, fortune, shape);
+  const summary = composeSummary(type, samjeong, fortune, shape, parts);
   return { features: f, type, shape, samjeong, parts, palaces, fortune, summary };
 }
