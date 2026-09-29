@@ -37,37 +37,47 @@
   </header>
 
   <main>
-    <!-- 시작 화면 -->
-    <section id="view-intro" class="panel intro">
-      <div class="intro-hero">
-        <div class="ring" aria-hidden="true">
-          <div class="ring-face">
-            <span>三停</span><span>五官</span><span>十二宮</span>
+    <!-- 첫 화면: 관상 · 손금 · 사주 종합 분석 -->
+    <section id="view-hub" class="panel hub">
+      <h2 class="hub-title">관상 · 손금 · 사주 종합 분석</h2>
+      <p class="hub-lead">세 가지를 함께 보면 가장 정확하고, <b>두 가지만 해도</b> 종합해 드립니다. 한 가지만 보려면 마친 뒤 「결과 보기」를 누르세요.</p>
+      <div class="hub-steps">
+        <article class="step" id="step-face">
+          <div class="step-num">相</div>
+          <div class="step-body">
+            <h3>관상 <small>얼굴</small></h3>
+            <p class="step-desc">정면 얼굴을 촬영하거나 사진을 올립니다. 이마를 드러내고 무표정에 가깝게 해 주세요.</p>
+            <p id="hub-face-status" class="step-status"></p>
+            <div class="step-btns"><button id="hub-face-cam" class="primary sm" type="button">📷 촬영</button><button id="hub-face-up" class="ghost sm" type="button">🖼 사진</button><button id="hub-face-view" class="ghost sm hidden" type="button">결과 보기</button></div>
           </div>
-        </div>
-        <h2>얼굴은 살아온 마음이<br>새겨진 지도입니다</h2>
-        <p class="lead">정면 얼굴을 촬영하면 <b>478개 얼굴 지점</b>을 측정해 이마·눈썹·눈·코·입·턱의 비율을 읽고, 관상학의 <b>삼정(三停)</b>과 <b>오관(五官)</b>, <b>십이궁(十二宮)</b> 이론으로 다섯 가지 운의 흐름을 풀이합니다.</p>
-        <div class="cta">
-          <button id="btn-start" class="primary" type="button">📷 카메라로 관상 보기</button>
-          <button id="btn-upload" class="ghost" type="button">🖼 사진 업로드</button>
-          <input id="file-input" type="file" accept="image/*" hidden>
-          <input id="capture-input" type="file" accept="image/*" capture="user" hidden>
-          <input id="palm-input" type="file" accept="image/*" hidden>
-          <input id="palm-capture-input" type="file" accept="image/*" capture="environment" hidden>
-        </div>
-        <button id="btn-combo" class="combo-cta" type="button">
-          <span class="combo-icons" aria-hidden="true">相 · 手 · 命</span>
-          <span class="combo-text"><b>관상 + 손금 + 사주 종합 분석</b><small>얼굴, 손바닥, 태어난 때를 함께 보고 하나로 엮어 풀이합니다</small></span>
-          <span class="combo-go" aria-hidden="true">›</span>
-        </button>
-        <p id="engine-status" class="engine-status" aria-live="polite">판독 엔진 준비 중…</p>
-        <p id="http-note" class="http-note hidden">이 주소는 HTTPS가 아니어서 실시간 촬영 가이드 없이 <b>휴대폰 기본 카메라</b>로 촬영합니다. 실시간 가이드를 쓰려면 <b>https://</b> 주소로 접속하세요.</p>
-        <ul class="tips">
-          <li>정면을 바라보고, 머리카락이 이마를 가리지 않게 해 주세요.</li>
-          <li>무표정에 가까운 자연스러운 얼굴이 가장 정확합니다.</li>
-          <li>사진은 기기 밖으로 전송되지 않으며 브라우저 안에서만 처리됩니다.</li>
-        </ul>
+        </article>
+        <article class="step" id="step-palm">
+          <div class="step-num">手</div>
+          <div class="step-body">
+            <h3>손금 <small>손바닥</small></h3>
+            <p class="step-desc">손가락을 펴고 손바닥이 잘 보이게 촬영합니다. 밝은 곳에서, 초점이 맞게 찍어 주세요.</p>
+            <p id="hub-palm-status" class="step-status"></p>
+            <div class="step-btns"><button id="hub-palm-cam" class="primary sm" type="button">📷 촬영</button><button id="hub-palm-up" class="ghost sm" type="button">🖼 사진</button><button id="hub-palm-view" class="ghost sm hidden" type="button">결과 보기</button></div>
+          </div>
+        </article>
+        <article class="step" id="step-saju">
+          <div class="step-num">命</div>
+          <div class="step-body">
+            <h3>사주 <small>四柱八字</small></h3>
+            <p class="step-desc">생년월일과 태어난 시간으로 여덟 글자를 세웁니다.</p>
+            <p id="hub-saju-status" class="step-status"></p>
+            <div class="step-btns"><button id="hub-saju" class="primary sm" type="button">입력하기</button><button id="hub-saju-view" class="ghost sm hidden" type="button">결과 보기</button></div>
+          </div>
+        </article>
       </div>
+      <div class="hub-actions">
+        <button id="hub-go" class="primary big" type="button" disabled>종합 결과 보기</button>
+        <p id="hub-hint" class="hub-hint">두 가지 이상 완료하면 종합 결과를 볼 수 있습니다.</p>
+        <button id="hub-reset" class="link" type="button">처음부터 다시</button>
+      </div>
+
+      <p id="engine-status" class="engine-status" aria-live="polite">판독 엔진 준비 중…</p>
+      <p id="http-note" class="http-note hidden">이 주소는 HTTPS가 아니어서 실시간 촬영 가이드 없이 <b>휴대폰 기본 카메라</b>로 촬영합니다. 실시간 가이드를 쓰려면 <b>https://</b> 주소로 접속하세요.</p>
 
       <div id="mobile-card" class="mobile-card hidden">
         <canvas id="qr" width="200" height="200" aria-label="휴대폰 접속용 QR 코드" role="img"></canvas>
@@ -80,11 +90,16 @@
       </div>
 
       <div class="features">
-        <div class="feat"><b>三停</b><span>삼정</span><p>이마·코·턱의 길이 비율로 초년·중년·말년 운의 흐름을 읽습니다.</p></div>
-        <div class="feat"><b>五行</b><span>오행 얼굴형</span><p>목·화·토·금·수 다섯 형(形) 중 어느 기운을 타고났는지 분류합니다.</p></div>
-        <div class="feat"><b>十二宮</b><span>십이궁</span><p>명궁·재백궁·부처궁 등 열두 자리의 발달 정도를 한눈에 봅니다.</p></div>
+        <div class="feat"><b>相</b><span>관상</span><p>삼정·오관·십이궁과 오행 얼굴형, 십자면상 열 가지 윤곽으로 읽습니다.</p></div>
+        <div class="feat"><b>手</b><span>손금</span><p>감정선·두뇌선·생명선·운명선의 길이와 굵기, 손 모양의 오행을 읽습니다.</p></div>
+        <div class="feat"><b>命</b><span>사주</span><p>태어난 해·달·날·시의 여덟 글자와 오행의 분포로 타고난 기질을 풀이합니다.</p></div>
       </div>
-      <p class="disclaimer">※ 본 서비스는 전통 관상학 이론을 바탕으로 한 <b>오락용 콘텐츠</b>입니다. 결과는 과학적·의학적 근거를 갖지 않으며, 중요한 결정의 근거로 사용하지 마세요.</p>
+      <p class="disclaimer">※ 사진과 생년월일은 이 기기 안에서만 처리되며 저장·전송되지 않습니다. 본 서비스는 전통 관상학·수상학·명리학을 바탕으로 한 <b>오락용 콘텐츠</b>이며 과학적·의학적 근거가 없으니, 중요한 결정의 근거로 사용하지 마세요.</p>
+
+      <input id="file-input" type="file" accept="image/*" hidden>
+      <input id="capture-input" type="file" accept="image/*" capture="user" hidden>
+      <input id="palm-input" type="file" accept="image/*" hidden>
+      <input id="palm-capture-input" type="file" accept="image/*" capture="environment" hidden>
     </section>
 
     <!-- 카메라 화면 (휴대폰에서는 전체 화면) -->
@@ -185,11 +200,6 @@
       <h3 class="sec"><span>總評</span>총평</h3>
       <div id="summary" class="summary"></div>
 
-      <button id="btn-to-combo" class="next-card" type="button">
-        <span class="next-icons" aria-hidden="true">手 · 命</span>
-        <span class="next-text"><b>손금과 사주도 함께 볼까요?</b><small>세 가지를 하나로 엮은 종합 분석을 받아 보세요</small></span>
-        <span class="combo-go" aria-hidden="true">›</span>
-      </button>
       <div id="combo-back-face" class="back-combo hidden"><button class="ghost" type="button" data-goto="combo">↩ 종합 결과로 돌아가기</button></div>
 
       <p class="disclaimer">※ 오락용 결과입니다. 얼굴은 타고나는 것이 아니라 살아온 마음이 새겨지는 것이라 했습니다.</p>
@@ -199,47 +209,6 @@
         <button id="btn-save" class="ghost" type="button">💾 결과 저장</button>
         <button id="btn-home" class="ghost" type="button" aria-label="처음으로">⌂</button>
       </div>
-    </section>
-
-    <!-- 종합 분석 허브 -->
-    <section id="view-hub" class="panel hidden hub">
-      <h2 class="hub-title">관상 · 손금 · 사주 종합 분석</h2>
-      <p class="hub-lead">세 가지를 모두 하면 가장 정확하고, <b>두 가지만 해도</b> 종합해 드립니다. 순서는 상관없습니다.</p>
-      <div class="hub-steps">
-        <article class="step" id="step-saju">
-          <div class="step-num">命</div>
-          <div class="step-body">
-            <h3>사주 <small>四柱八字</small></h3>
-            <p class="step-desc">생년월일과 태어난 시간으로 여덟 글자를 세웁니다.</p>
-            <p id="hub-saju-status" class="step-status"></p>
-            <div class="step-btns"><button id="hub-saju" class="primary sm" type="button">입력하기</button><button id="hub-saju-view" class="ghost sm hidden" type="button">결과 보기</button></div>
-          </div>
-        </article>
-        <article class="step" id="step-face">
-          <div class="step-num">相</div>
-          <div class="step-body">
-            <h3>관상 <small>얼굴</small></h3>
-            <p class="step-desc">정면 얼굴을 촬영하거나 사진을 올립니다.</p>
-            <p id="hub-face-status" class="step-status"></p>
-            <div class="step-btns"><button id="hub-face-cam" class="primary sm" type="button">📷 촬영</button><button id="hub-face-up" class="ghost sm" type="button">🖼 사진</button><button id="hub-face-view" class="ghost sm hidden" type="button">결과 보기</button></div>
-          </div>
-        </article>
-        <article class="step" id="step-palm">
-          <div class="step-num">手</div>
-          <div class="step-body">
-            <h3>손금 <small>손바닥</small></h3>
-            <p class="step-desc">손가락을 펴고 손바닥이 잘 보이게 촬영합니다. 밝은 곳에서, 초점이 맞게 찍어 주세요.</p>
-            <p id="hub-palm-status" class="step-status"></p>
-            <div class="step-btns"><button id="hub-palm-cam" class="primary sm" type="button">📷 촬영</button><button id="hub-palm-up" class="ghost sm" type="button">🖼 사진</button><button id="hub-palm-view" class="ghost sm hidden" type="button">결과 보기</button></div>
-          </div>
-        </article>
-      </div>
-      <div class="hub-actions">
-        <button id="hub-go" class="primary big" type="button" disabled>종합 결과 보기</button>
-        <p id="hub-hint" class="hub-hint">두 가지 이상 완료하면 종합 결과를 볼 수 있습니다.</p>
-        <button id="hub-reset" class="link" type="button">처음부터 다시</button>
-      </div>
-      <p class="disclaimer">※ 사진과 생년월일은 이 기기 안에서만 처리되며 저장·전송되지 않습니다. 오락용 콘텐츠입니다.</p>
     </section>
 
     <!-- 사주 입력 -->
@@ -310,9 +279,8 @@
       <p class="disclaimer">※ 사주는 태어난 해·달·날·시를 간지(干支)로 바꿔 풀이하는 전통 명리학이며, 오락용으로 간략히 풀이한 결과입니다.</p>
       <div class="back-combo hidden" data-back-combo><button class="ghost" type="button" data-goto="combo">↩ 종합 결과로 돌아가기</button></div>
       <div class="result-bar">
-        <button class="primary" type="button" data-goto="hub">종합 분석</button>
+        <button class="primary" type="button" data-goto="hub">🏠 처음으로</button>
         <button class="ghost" type="button" data-goto="sajuform">✎ 다시 입력</button>
-        <button class="ghost" type="button" data-goto="intro" aria-label="처음으로">⌂</button>
       </div>
     </section>
 
@@ -353,9 +321,8 @@
       <p class="disclaimer">※ 손금 선은 사진의 밝기·초점·손의 각도에 따라 부정확하게 찾아질 수 있습니다. 오락용 참고 결과입니다.</p>
       <div class="back-combo hidden" data-back-combo><button class="ghost" type="button" data-goto="combo">↩ 종합 결과로 돌아가기</button></div>
       <div class="result-bar">
-        <button class="primary" type="button" data-goto="hub">종합 분석</button>
+        <button class="primary" type="button" data-goto="hub">🏠 처음으로</button>
         <button class="ghost" type="button" id="palm-retake">📷 재촬영</button>
-        <button class="ghost" type="button" data-goto="intro" aria-label="처음으로">⌂</button>
       </div>
     </section>
 
@@ -387,9 +354,8 @@
 
       <p class="disclaimer">※ 관상·손금·사주는 서로 다른 전통 이론을 오락용으로 엮은 결과이며 과학적 근거가 없습니다.</p>
       <div class="result-bar">
-        <button class="primary" type="button" data-goto="hub">↺ 다시 하기</button>
-        <button class="ghost" type="button" id="combo-save">💾 저장</button>
-        <button class="ghost" type="button" data-goto="intro" aria-label="처음으로">⌂</button>
+        <button class="primary" type="button" data-goto="hub">🏠 처음으로</button>
+        <button class="ghost" type="button" id="combo-save">💾 결과 저장</button>
       </div>
     </section>
   </main>
