@@ -3,6 +3,7 @@
 //  입력: 픽셀 좌표 랜드마크 배열 [{x, y, z}] (468개 이상)
 //  1) 롤(기울기) → 2) 요(좌우 회전) → 3) 피치(상하 회전) 순으로 정면화한 뒤 비율을 계산한다.
 // ─────────────────────────────────────────────────────────────
+import { PERSPECTIVE_KEYS, PERSPECTIVE_TABLE } from './perspective.js';
 
 export const LM = {
   top: 10, chin: 152, cheekL: 234, cheekR: 454, jawL: 172, jawR: 397, foreheadL: 103, foreheadR: 332,
@@ -13,6 +14,7 @@ export const LM = {
   browL: { inner: 107, peak: 105, outer: 70, bottom: 52 },
   browR: { inner: 336, peak: 334, outer: 300, bottom: 282 },
   cheekPtL: 50, cheekPtR: 280,
+  lowJawL: 150, lowJawR: 379,   // 턱 끝 가까운 아래턱 (턱 끝 폭)
 };
 export const SYM_PAIRS = [[33, 263], [133, 362], [61, 291], [234, 454], [129, 358], [70, 300], [107, 336], [172, 397], [159, 386], [145, 374], [50, 280], [103, 332]];
 
@@ -24,6 +26,12 @@ export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 export const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 export const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: ((a.z ?? 0) + (b.z ?? 0)) / 2 });
 const deg = (r) => r * 180 / Math.PI;
+/** 점 b 에서 a·c 방향이 이루는 각(도) */
+function angleAt(a, b, c) {
+  const v1 = { x: a.x - b.x, y: a.y - b.y }, v2 = { x: c.x - b.x, y: c.y - b.y };
+  const cos = (v1.x * v2.x + v1.y * v2.y) / (Math.hypot(v1.x, v1.y) * Math.hypot(v2.x, v2.y));
+  return deg(Math.acos(clamp(cos, -1, 1)));
+}
 
 function rotZ(p, c, a) { const cos = Math.cos(a), sin = Math.sin(a), dx = p.x - c.x, dy = p.y - c.y; return { x: c.x + dx * cos - dy * sin, y: c.y + dx * sin + dy * cos, z: p.z }; }
 function rotY(p, c, a) { const cos = Math.cos(a), sin = Math.sin(a), dx = p.x - c.x, dz = p.z - c.z; return { x: c.x + dx * cos + dz * sin, y: p.y, z: c.z - dx * sin + dz * cos }; }
@@ -93,9 +101,52 @@ export function measure(rawPts, opts = {}) {
     philtrum: dist(p[LM.subnasale], p[LM.lipTop]) / faceH,
     mouthWidth: dist(p[LM.mouthL], p[LM.mouthR]) / faceW,
     lipThick: dist(p[LM.lipTop], p[LM.lipBottom]) / faceH,
+    // 턱 각도: 볼 옆선(234) → 턱 모서리(172) → 턱 끝(152)이 이루는 각. 각진 얼굴일수록 작고 둥근 얼굴일수록 크다.
+    jawAngle: (angleAt(p[LM.cheekL], p[LM.jawL], p[LM.chin]) + angleAt(p[LM.cheekR], p[LM.jawR], p[LM.chin])) / 2,
+    // 턱 끝 폭: 턱 끝 가까운 아래턱 너비 ÷ 얼굴 너비. 뾰족한 턱일수록 좁다.
+    chinWidth: dist(p[LM.lowJawL], p[LM.lowJawR]) / faceW,
     asym,
     symmetry: clamp(1 - asym * 5, 0, 1),
     pose,
     _pts: p,
   };
+}
+
+// ── 원근 보정 ─────────────────────────────────────────────────
+// 가까이서 찍을수록(셀카) 코·눈은 크게, 얼굴 옆선은 좁게 찍혀 비율이 한쪽으로 쏠린다.
+// 표준 얼굴 모델로 만든 거리별 측정표(perspective.js)를 이용해 기준 거리에서 찍은 값으로 되돌린다.
+export const PERSPECTIVE_REF_CM = 150;   // 판정 기준값을 만든 표본(인물 사진)의 촬영 거리로 가정
+export const DEFAULT_DIAG_FOV = 76;      // 휴대폰 전면·노트북 카메라의 대각선 화각(도) 가정
+
+function tableAt(D, col) {
+  const T = PERSPECTIVE_TABLE;
+  if (D <= T[0][0]) return T[0][col];
+  for (let i = 0; i < T.length - 1; i++) {
+    const a = T[i], b = T[i + 1];
+    if (D <= b[0]) { const t = (D - a[0]) / (b[0] - a[0]); return a[col] + t * (b[col] - a[col]); }
+  }
+  return T[T.length - 1][col];
+}
+
+/** 얼굴 너비(px)와 사진 크기·대각선 화각으로 촬영 거리(cm)를 추정한다. */
+export function estimateDistance(rawPts, imgW, imgH, diagFovDeg = DEFAULT_DIAG_FOV) {
+  const focal = Math.hypot(imgW, imgH) / 2 / Math.tan(diagFovDeg * Math.PI / 360);
+  const r = dist(rawPts[LM.cheekL], rawPts[LM.cheekR]) / focal;
+  const T = PERSPECTIVE_TABLE;
+  if (r >= T[0][1]) return T[0][0];
+  for (let i = 0; i < T.length - 1; i++) {
+    const a = T[i], b = T[i + 1];
+    if (r >= b[1]) return a[0] + (a[1] - r) / (a[1] - b[1]) * (b[0] - a[0]);
+  }
+  return T[T.length - 1][0];
+}
+
+/** 촬영 거리 D(cm)의 원근 왜곡을 빼서 기준 거리에서 찍은 값으로 바꾼다. */
+export function correctPerspective(features, D, ref = PERSPECTIVE_REF_CM) {
+  const out = { ...features };
+  PERSPECTIVE_KEYS.forEach((k, i) => {
+    if (typeof out[k] === 'number') out[k] -= tableAt(D, i + 2) - tableAt(ref, i + 2);
+  });
+  out.distanceCm = Math.round(D);
+  return out;
 }

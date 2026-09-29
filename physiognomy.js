@@ -10,31 +10,33 @@
 
 export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
-// 가상 인물 표본 17명 (전체 28명 중 정면 사진) · [중앙값, 표준편차]
+// 가상 인물 표본 44명 (전체 61명 중 정면 사진) · [중앙값, 표준편차]
 export const POP = {
-  faceRatio: [1.1822, 0.0485],
-  upperRatio: [0.1905, 0.0086],
-  middleRatio: [0.3855, 0.0122],
-  lowerRatio: [0.4241, 0.0145],
-  foreheadWidthRatio: [0.7033, 0.0203],
-  jawRatio: [0.7993, 0.0193],
-  chinLen: [0.2096, 0.0213],
-  eyeSize: [0.1935, 0.0081],
-  eyeOpen: [0.2967, 0.0456],
-  eyeTilt: [2.9109, 1.5875],
-  interEye: [1.2218, 0.0846],
-  glabella: [1.067, 0.0423],
-  browArch: [0.2204, 0.0139],
-  browLen: [1.6118, 0.0638],
-  browEyeGap: [0.4975, 0.0456],
-  underEye: [1.2586, 0.0826],
-  noseLen: [0.2885, 0.0083],
-  noseWidth: [0.3089, 0.017],
-  philtrum: [0.0786, 0.0127],
-  mouthWidth: [0.3882, 0.0274],
-  lipThick: [0.1331, 0.0299],
-  symmetry: [0.9381, 0.0406],
-  samjeongSpread: [5.53, 4.75],
+  faceRatio: [1.186, 0.0485],
+  upperRatio: [0.191, 0.0091],
+  middleRatio: [0.3853, 0.011],
+  lowerRatio: [0.4236, 0.0141],
+  foreheadWidthRatio: [0.7008, 0.0197],
+  jawRatio: [0.8023, 0.0206],
+  chinLen: [0.2108, 0.0181],
+  eyeSize: [0.1925, 0.0087],
+  eyeOpen: [0.2905, 0.043],
+  eyeTilt: [2.9612, 1.5516],
+  interEye: [1.2633, 0.0852],
+  glabella: [1.0722, 0.041],
+  browArch: [0.2183, 0.0163],
+  browLen: [1.6258, 0.063],
+  browEyeGap: [0.4986, 0.0493],
+  underEye: [1.2911, 0.0741],
+  noseLen: [0.2885, 0.0084],
+  noseWidth: [0.3094, 0.0161],
+  philtrum: [0.0772, 0.0135],
+  mouthWidth: [0.3854, 0.0244],
+  lipThick: [0.1338, 0.027],
+  jawAngle: [132.2337, 2.9025],
+  chinWidth: [0.5611, 0.0224],
+  symmetry: [0.9414, 0.0502],
+  samjeongSpread: [6.3, 4.19],
 };
 /** 표준점수. 측정 오류로 튀는 값은 ±2.5 로 자른다. */
 export const Z = (f, k) => clamp((f[k] - POP[k][0]) / POP[k][1], -2.5, 2.5);
@@ -117,7 +119,7 @@ export function faceTypeScores(f) {
   };
 }
 // 표본 평균을 빼서 다섯 형이 고르게 나오도록 맞춘다 (node tools/calibrate-population.mjs --offsets)
-const FACE_TYPE_OFFSET = { wood: 0.243, fire: -0.075, earth: -0.171, metal: -0.45, water: -0.124 };
+const FACE_TYPE_OFFSET = { wood: 0.207, fire: -0.169, earth: -0.117, metal: -0.373, water: -0.135 };
 
 export function classifyFaceType(f) {
   const s = faceTypeScores(f);
@@ -129,6 +131,91 @@ export function classifyFaceType(f) {
     primary: FACE_TYPES[ranked[0][0]],
     secondary: FACE_TYPES[ranked[1][0]],
     weights: exp.map(([k, v]) => ({ type: FACE_TYPES[k], pct: Math.round((v / total) * 100) })),
+  };
+}
+
+
+// ── 십자면상(十字面相): 얼굴 윤곽을 열 글자에 빗댄 분류 ─────────
+// 각 형의 전형적인 모양을 표준점수(z) 목표값으로 정의하고, 가장 가까운 형을 고른다.
+// F 얼굴 길이, H 이마 폭, J 턱 폭, A 턱 각도(작을수록 각짐), C 턱 끝 폭, S 좌우 균형, U 상정, L 하정
+export const SIPJA_TYPES = {
+  jeon: { char: '田', name: '전자형(田字形)', shape: '네모반듯하고 이마·광대·턱이 고르게 넓은 얼굴',
+    proto: { F: -0.9, H: 0.7, J: 0.8, A: -0.9, C: 0.6 },
+    text: '밭 전(田)자처럼 윤곽이 네모반듯하고 이마와 턱이 고르게 넓습니다. 관상에서는 땅처럼 든든한 상이라 하여 재물과 부동산의 복이 두텁고, 한번 쥔 것을 오래 지키는 힘이 강하다고 봅니다. 중년 이후 재산이 불어나는 흐름입니다.',
+    advice: '뚝심이 고집으로 비치지 않도록 마음의 문을 조금 더 열어 두세요.',
+    closing: '네모반듯한 윤곽처럼 쌓을수록 단단해지는 상입니다.' },
+  yu: { char: '由', name: '유자형(由字形)', shape: '이마는 아담하고 아래턱이 넓은 얼굴',
+    proto: { H: -1.1, J: 0.9, C: 0.8, U: -0.3, L: 0.3 },
+    text: '말미암을 유(由)자처럼 위는 아담하고 아래가 넉넉합니다. 초년에는 스스로 길을 개척하느라 애쓰지만, 중년 이후 크게 일어서는 대기만성·자수성가의 상입니다. 말년이 풍요롭고 아랫사람이 잘 따릅니다.',
+    advice: '젊은 날의 고생을 두려워하지 마세요. 뿌리가 깊을수록 늦게 핀 꽃이 오래갑니다.',
+    closing: '아래가 넉넉한 윤곽처럼 갈수록 복이 차오르는 상입니다.' },
+  gap: { char: '甲', name: '갑자형(甲字形)', shape: '이마가 넓고 턱이 좁아지는 역삼각형 얼굴',
+    proto: { H: 1.0, J: -0.9, C: -1.0, U: 0.4 },
+    text: '갑옷 갑(甲)자처럼 이마가 넓고 턱으로 갈수록 좁아집니다. 머리가 명석하고 기획·학문에 강해 초년부터 두각을 나타내는 상입니다. 생각이 앞서가는 만큼 남보다 먼저 기회를 알아봅니다.',
+    advice: '말년을 위해 건강과 저축을 일찍 챙기면 초년의 빛이 끝까지 이어집니다.',
+    closing: '넓은 이마처럼 멀리 내다보는 지혜가 운을 이끄는 상입니다.' },
+  sin: { char: '申', name: '신자형(申字形)', shape: '이마와 턱이 좁고 광대가 넓은 마름모형 얼굴',
+    proto: { H: -1.0, J: -0.8, C: -0.8, F: 0.2 },
+    text: '납 신(申)자처럼 이마와 턱은 좁고 가운데 광대가 넓습니다. 활동력과 추진력이 뛰어나 중년에 기회를 크게 잡는 상입니다. 변화가 많은 환경일수록 오히려 실력이 드러납니다.',
+    advice: '서두르는 마음을 다스리고 사람을 곁에 두면 중년의 기회가 오래 머뭅니다.',
+    closing: '가운데가 힘찬 윤곽처럼 한창때에 크게 도약하는 상입니다.' },
+  dong: { char: '同', name: '동자형(同字形)', shape: '이마·광대·턱이 고르고 반듯한 직사각형 얼굴',
+    proto: { F: 0.8, H: 0.5, J: 0.6, A: -0.4, C: 0.3 },
+    text: '한가지 동(同)자처럼 위아래 폭이 고르고 반듯합니다. 관상에서 복록이 고르게 갖춰진 상으로 보며, 조직에서 두루 신임을 얻고 평생 큰 굴곡 없이 안정된 길을 갑니다.',
+    advice: '안정 속에서도 새로운 도전을 한 번씩 해 보면 복의 그릇이 더 커집니다.',
+    closing: '반듯한 윤곽처럼 한결같은 신뢰가 복을 부르는 상입니다.' },
+  wang: { char: '王', name: '왕자형(王字形)', shape: '뼈대가 드러나고 각이 선 얼굴',
+    proto: { A: -1.2, H: -0.6, J: 0.2, F: 0.5 },
+    text: '임금 왕(王)자처럼 이마·광대·턱의 뼈대가 또렷하고 각이 섭니다. 의지가 강하고 개척 정신이 뛰어나 역경을 뚫고 이름을 날리는 상입니다. 위기에서 오히려 진가가 드러납니다.',
+    advice: '강한 기운을 부드러운 말씨로 감싸면 따르는 사람이 크게 늘어납니다.',
+    closing: '또렷한 뼈대처럼 굳은 의지로 길을 여는 상입니다.' },
+  won: { char: '圓', name: '원자형(圓字形)', shape: '둥글고 부드러운 곡선의 얼굴',
+    proto: { F: -1.1, A: 1.1, C: 0.5, J: 0.2 },
+    text: '둥글 원(圓)자처럼 윤곽이 둥글고 부드럽습니다. 성품이 원만해 사람이 모이고 인복과 식복이 두터운 상입니다. 갈등을 부드럽게 풀어 주위를 편안하게 만드는 힘이 있습니다.',
+    advice: '결정할 때는 한 번 더 단호해지세요. 원만함에 결단이 더해지면 큰일을 이룹니다.',
+    closing: '둥근 윤곽처럼 사람과 복이 모여드는 상입니다.' },
+  mok: { char: '目', name: '목자형(目字形)', shape: '세로로 길고 갸름한 얼굴',
+    proto: { F: 1.4, H: -0.3, J: -0.4, C: -0.2 },
+    text: '눈 목(目)자처럼 세로로 길고 갸름합니다. 섬세하고 지적이며 예술적 감각이 뛰어나, 한 우물을 깊이 파는 전문가로 명예를 얻는 상입니다.',
+    advice: '혼자 파고드는 시간만큼 사람과 어울리는 시간도 챙기면 운이 넓어집니다.',
+    closing: '길게 뻗은 윤곽처럼 한 길을 깊이 가는 상입니다.' },
+  yong: { char: '用', name: '용자형(用字形)', shape: '좌우가 조금 다르고 아래가 두툼한 얼굴',
+    proto: { S: -1.3, L: 0.4, J: 0.4 },
+    text: '쓸 용(用)자처럼 좌우의 모양이 조금씩 다르고 아래가 두툼합니다. 개성이 뚜렷하고 재주가 여러 갈래라 어디서든 쓰임이 많은 실용의 상입니다. 늦게 빛을 보지만 그만큼 오래갑니다.',
+    advice: '재주가 많을수록 한곳에 힘을 모을 때 가장 크게 빛납니다.',
+    closing: '쓰임이 많은 윤곽처럼 재주로 길을 넓히는 상입니다.' },
+  pung: { char: '風', name: '풍자형(風字形)', shape: '이마와 턱이 넓고 볼이 갸름한 얼굴',
+    proto: { H: 1.0, J: 1.0, F: 0.2, A: 0.3 },
+    text: '바람 풍(風)자처럼 이마와 턱은 넓고 볼은 갸름합니다. 대범하고 사교적이며 이동과 변화가 많은 넓은 무대에서 활약하는 상입니다. 여행과 새로운 만남에서 기회를 얻습니다.',
+    advice: '들어오는 만큼 나가기 쉬우니 재물 관리를 꼼꼼히 하면 복이 머뭅니다.',
+    closing: '바람처럼 넓은 세상을 누비며 기회를 얻는 상입니다.' },
+};
+
+/** 십자면상 원점수 (보정 전). 목표값에 가까울수록 크다. */
+export function sipjaScores(f) {
+  const z = { F: Z(f, 'faceRatio'), H: Z(f, 'foreheadWidthRatio'), J: Z(f, 'jawRatio'), A: Z(f, 'jawAngle'),
+    C: Z(f, 'chinWidth'), S: Z(f, 'symmetry'), U: Z(f, 'upperRatio'), L: Z(f, 'lowerRatio') };
+  const out = {};
+  for (const [k, t] of Object.entries(SIPJA_TYPES)) {
+    let dot = 0, norm = 0;
+    for (const [d, v] of Object.entries(t.proto)) { dot += z[d] * v; norm += v * v; }
+    out[k] = dot - norm / 2;   // |z - proto|² 최소화와 같다 (|z|² 는 모든 형에 공통)
+  }
+  return out;
+}
+// 형마다 점수의 평균과 퍼짐 폭이 달라 일부 형만 자주 1위가 되므로, 표본 기준으로 표준화한다
+// [평균, 표준편차] (node tools/calibrate-population.mjs --offsets)
+const SIPJA_NORM = { yong: [-0.678, 1.387], jeon: [-1.526, 2.325], yu: [-1.69, 2.659], gap: [-1.225, 2.615], sin: [-1.077, 1.601], dong: [-0.462, 1.188], wang: [-0.607, 1.315], won: [-1.988, 0.974], mok: [-0.793, 1.497], pung: [-1.081, 1.133] };
+
+export function classifySipja(f) {
+  const s = sipjaScores(f);
+  for (const k in s) s[k] = (s[k] - SIPJA_NORM[k][0]) / SIPJA_NORM[k][1];
+  const ranked = Object.entries(s).sort((a, b) => b[1] - a[1]);
+  const exp = ranked.map(([k, v]) => [k, Math.exp(v * 1.5)]);
+  const total = exp.reduce((acc, [, v]) => acc + v, 0);
+  return {
+    primary: { key: ranked[0][0], ...SIPJA_TYPES[ranked[0][0]] },
+    weights: exp.slice(0, 3).map(([k, v]) => ({ key: k, ...SIPJA_TYPES[k], pct: Math.round((v / total) * 100) })),
   };
 }
 
@@ -308,7 +395,7 @@ export function fortuneZ(f, samjeong) {
   };
 }
 // 표본 평균을 빼서 다섯 운이 고르게 1위가 되도록 맞춘다 (node tools/calibrate-population.mjs --offsets)
-const FORTUNE_OFFSET = { wealth: -0.22, love: 0.213, career: -0.331, health: -0.295, social: -0.16 };
+const FORTUNE_OFFSET = { wealth: 0.008, love: 0.014, career: -0.132, health: -0.268, social: -0.059 };
 
 export function analyzeFortunes(f, samjeong) {
   const raw = fortuneZ(f, samjeong);
@@ -354,17 +441,17 @@ export function analyzeFortunes(f, samjeong) {
 }
 
 // ── 총평 ─────────────────────────────────────────────────────
-export function composeSummary(type, samjeong, fortune) {
+export function composeSummary(type, samjeong, fortune, shape) {
   const t = type.primary;
   const s = type.secondary;
   const b = fortune.best;
   const w = fortune.weakest;
   const grade = gradeLabel(fortune.avg).replace(/ (.+)$/, '($1)');
   return [
-    `당신의 얼굴은 ${t.name}을 바탕으로 ${s.name}의 기운이 섞인 상으로, 관상학에서는 「${t.keyword}」의 기질을 타고났다고 봅니다.`,
+    `얼굴 윤곽은 십자면상의 ${shape.primary.name}으로 ${shape.primary.shape}입니다. 기질은 ${t.name}을 바탕으로 ${s.name}의 기운이 섞여, 관상학에서는 「${t.keyword}」의 기질을 타고났다고 봅니다.`,
     samjeong.balance,
     `다섯 운 가운데 ${b.name}이 가장 밝게 빛나(${b.score}점) 이 방면에서 남보다 유리한 흐름을 타고 있습니다. ${w.name}(${w.score}점)은 약점이 아니라 다듬을수록 크게 자라는 자리입니다. ${t.caution}`,
-    `종합하여 ${grade}의 상으로, 얼굴은 타고나는 것이 아니라 살아온 마음이 새겨지는 것이라 했습니다. 오늘의 표정이 내일의 관상을 만듭니다.`,
+    `종합하면 ${grade}에 해당하며, ${shape.primary.closing} 얼굴은 살아온 마음이 새겨지는 것이니 오늘의 표정이 내일의 관상을 만듭니다.`,
   ];
 }
 
@@ -375,6 +462,7 @@ export function analyze(f) {
   const parts = analyzeParts(f);
   const palaces = analyzePalaces(f);
   const fortune = analyzeFortunes(f, samjeong);
-  const summary = composeSummary(type, samjeong, fortune);
-  return { features: f, type, samjeong, parts, palaces, fortune, summary };
+  const shape = classifySipja(f);
+  const summary = composeSummary(type, samjeong, fortune, shape);
+  return { features: f, type, shape, samjeong, parts, palaces, fortune, summary };
 }

@@ -115,12 +115,15 @@
     <!-- 결과 -->
     <section id="view-result" class="panel hidden result">
       <div class="result-top">
-        <div class="photo-wrap"><canvas id="result-photo" role="img" aria-label="측정 지점이 표시된 얼굴 사진"></canvas></div>
+        <div class="photo-col">
+          <div class="photo-wrap"><canvas id="result-photo" role="img" aria-label="측정 지점이 표시된 얼굴 사진"></canvas></div>
+          <p id="photo-note" class="photo-note"></p>
+        </div>
         <div class="type-card">
           <div class="type-head">
             <div id="type-seal" class="type-seal">木</div>
             <div>
-              <div class="type-eyebrow">오행 얼굴형</div>
+              <div class="type-eyebrow">오행 기질 · 五行形</div>
               <h2 id="type-name">목형(木形)</h2>
               <p id="type-shape" class="type-shape"></p>
               <p id="type-keyword" class="type-keyword"></p>
@@ -142,6 +145,20 @@
             <div><h4>어울리는 길</h4><p id="type-career"></p><h4>길한 기운</h4><p id="type-lucky"></p></div>
           </div>
         </div>
+      </div>
+
+      <div class="shape-card">
+        <div class="shape-head">
+          <div id="shape-char" class="shape-char">田</div>
+          <div>
+            <div class="type-eyebrow">십자면상 · 十字面相 · 얼굴 윤곽</div>
+            <h2 id="shape-name">전자형(田字形)</h2>
+            <p id="shape-shape" class="type-shape"></p>
+          </div>
+        </div>
+        <p id="shape-text" class="type-desc"></p>
+        <p id="shape-advice" class="shape-advice"></p>
+        <div id="shape-top" class="shape-top" aria-label="가까운 얼굴 윤곽 세 가지"></div>
       </div>
 
       <h3 class="sec"><span>三停</span>인생의 흐름</h3>

@@ -4,7 +4,7 @@
 //  PC와 휴대폰(안드로이드·아이폰) 모두 지원
 // ─────────────────────────────────────────────────────────────
 import { analyze, clamp, gradeLabel } from './physiognomy.js';
-import { measure, LM, dist, mid } from './measure.js';
+import { measure, LM, dist, mid, estimateDistance, correctPerspective } from './measure.js';
 
 // ── 엔진 경로: 로컬(vendor/) 우선, 없으면 CDN ────────────────
 const MP_VERSION = '0.10.14';
@@ -22,6 +22,8 @@ const CAN_LIVE = window.isSecureContext && !!navigator.mediaDevices?.getUserMedi
 const DETECT_INTERVAL = IS_MOBILE ? 66 : 33;   // 휴대폰은 초당 15회, PC는 30회 검출
 const AUTO_HOLD_MS = 1200;                     // 조건을 이만큼 유지하면 자동 촬영
 const FEATURE_WINDOW_MS = 1500;                // 중앙값에 쓰는 최근 프레임 범위
+// 원근 보정용 카메라 대각선 화각(도) 가정: 휴대폰 전면 카메라 동영상 약 80도, 노트북 웹캠 약 72도
+const CAMERA_DIAG_FOV = IS_MOBILE ? 80 : 72;
 
 // ── DOM ──────────────────────────────────────────────────────
 const $ = (s) => document.querySelector(s);
@@ -399,7 +401,7 @@ async function captureFromVideo() {
   ctx.drawImage(video, 0, 0, snapshot.width, snapshot.height);
   ctx.restore();
   stopCamera();
-  try { await analyzeSnapshot({ liveFeatures: buf, history: 'replace' }); }
+  try { await analyzeSnapshot({ liveFeatures: buf, history: 'replace', fov: { deg: CAMERA_DIAG_FOV, source: 'camera' } }); }
   finally { capturing = false; }
 }
 
@@ -435,8 +437,17 @@ async function handleFile(file) {
   if (!file) return;
   if (file.type && !file.type.startsWith('image/')) { showToast('이미지 파일만 분석할 수 있습니다.'); return; }
   try {
+    const exif = await readExif(file);
     await drawFileToSnapshot(file);
-    await analyzeSnapshot({ history: current === 'intro' ? 'push' : 'replace' });
+    // 사진 촬영 정보(EXIF)에 35mm 환산 초점거리가 있으면 화각을 알 수 있어 원근 보정을 한다.
+    // 단, 잘라낸 사진은 화각이 달라지므로(원본과 가로세로 비율이 다르면) 보정하지 않는다.
+    let fov = null;
+    if (exif?.focal35) {
+      const ratio = (a, b) => Math.max(a, b) / Math.min(a, b);
+      const cropped = exif.w && exif.h && Math.abs(ratio(exif.w, exif.h) - ratio(snapshot.width, snapshot.height)) > 0.03;
+      fov = cropped ? { skip: 'cropped' } : { deg: 2 * Math.atan(21.63 / exif.focal35) * 180 / Math.PI, source: 'exif' };
+    }
+    await analyzeSnapshot({ history: current === 'intro' ? 'push' : 'replace', fov });
   } catch (e) {
     showToast(e.message || String(e), 4000);
     show('intro', { history: 'replace' });
@@ -447,7 +458,33 @@ function detectImage() {
   return engine.landmarker.detect(snapshot);
 }
 
-async function analyzeSnapshot({ liveFeatures = [], history: histMode = 'push' } = {}) {
+/** JPEG 촬영 정보(EXIF)에서 35mm 환산 초점거리(0xA405)와 원본 크기(0xA002·0xA003)를 읽는다. 없으면 null. */
+async function readExif(file) {
+  try {
+    const v = new DataView(await file.slice(0, 256 * 1024).arrayBuffer());
+    if (v.getUint16(0) !== 0xFFD8) return null;
+    let off = 2;
+    while (off + 10 < v.byteLength) {
+      const marker = v.getUint16(off), len = v.getUint16(off + 2);
+      if ((marker & 0xFF00) !== 0xFF00) return null;
+      if (marker === 0xFFE1 && v.getUint32(off + 4) === 0x45786966) {   // 'Exif'
+        const tiff = off + 10, le = v.getUint16(tiff) === 0x4949;
+        const u16 = (o) => v.getUint16(o, le), u32 = (o) => v.getUint32(o, le);
+        const find = (ifd, tag) => { const n = u16(ifd); for (let i = 0; i < n; i++) { const e = ifd + 2 + i * 12; if (u16(e) === tag) return e; } return null; };
+        const val = (e) => (e ? (u16(e + 2) === 4 ? u32(e + 8) : u16(e + 8)) : 0);   // 형식 3=SHORT, 4=LONG
+        const exifPtr = find(tiff + u32(tiff + 4), 0x8769);
+        if (!exifPtr) return null;
+        const ifd = tiff + u32(exifPtr + 8);
+        const f35 = val(find(ifd, 0xA405));
+        return { focal35: f35 >= 10 && f35 <= 300 ? f35 : null, w: val(find(ifd, 0xA002)), h: val(find(ifd, 0xA003)) };
+      }
+      off += 2 + len;
+    }
+  } catch { /* 촬영 정보 없음 */ }
+  return null;
+}
+
+async function analyzeSnapshot({ liveFeatures = [], history: histMode = 'push', fov = null } = {}) {
   show('analyzing', { history: histMode });
   $('#analyzing-steps').innerHTML = '';
   const steps = ['얼굴 윤곽을 찾는 중…', '478개 지점을 측정하는 중…', '삼정(三停)과 오관(五官)을 읽는 중…', '십이궁(十二宮)의 기운을 해석하는 중…'];
@@ -470,7 +507,15 @@ async function analyzeSnapshot({ liveFeatures = [], history: histMode = 'push' }
     const pts = toPixels(lm, snapshot.width, snapshot.height);
     const snapFeatures = measure(pts);
     // 실시간 촬영이면 최근 여러 프레임의 중앙값으로 흔들림을 줄인다
-    const features = liveFeatures.length >= 3 ? medianFeatures([...liveFeatures, snapFeatures], snapFeatures) : snapFeatures;
+    let features = liveFeatures.length >= 3 ? medianFeatures([...liveFeatures, snapFeatures], snapFeatures) : snapFeatures;
+    // 원근 보정: 셀카처럼 가까이서 찍으면 비율이 한쪽으로 쏠리므로 추정 거리의 왜곡을 빼 준다
+    if (fov?.skip) features.perspectiveSkip = fov.skip;
+    else if (fov) {
+      // 팔을 뻗은 셀카보다 가까울 수는 없으므로 25cm 아래는 25cm로 본다 (과보정 방지)
+      const D = Math.max(25, estimateDistance(pts, snapshot.width, snapshot.height, fov.deg));
+      features = correctPerspective(features, D);
+      features.fovSource = fov.source;
+    }
     features.frames = liveFeatures.length + 1;
     const result = analyze(features);
     result.pts = pts;
@@ -527,8 +572,9 @@ function faceCrop(pts, W, H) {
 }
 
 function renderResult(r) {
-  const { type, samjeong, parts, palaces, fortune, summary } = r;
+  const { type, shape, samjeong, parts, palaces, fortune, summary } = r;
   const t = type.primary;
+  const sh = shape.primary;
 
   // 얼굴 부분만 잘라서 표시
   const crop = faceCrop(r.pts, snapshot.width, snapshot.height);
@@ -549,6 +595,22 @@ function renderResult(r) {
   $('#type-shape').textContent = t.shape;
   $('#type-keyword').textContent = t.keyword;
   $('#type-desc').textContent = t.desc;
+
+  // 십자면상
+  $('#shape-char').textContent = sh.char;
+  $('#shape-name').textContent = sh.name;
+  $('#shape-shape').textContent = sh.shape;
+  $('#shape-text').textContent = sh.text;
+  $('#shape-advice').textContent = sh.advice;
+  $('#shape-top').innerHTML = shape.weights.map((w, i) => `<span class="${i ? '' : 'on'}"><b>${w.char}</b>${w.name.replace(/\(.+\)/, '')} ${w.pct}%</span>`).join('');
+
+  // 촬영 거리와 원근 보정 안내
+  const fe = r.features;
+  $('#photo-note').textContent = fe.distanceCm
+    ? `촬영 거리 약 ${fe.distanceCm}cm로 추정해 원근 왜곡을 보정했습니다.`
+    : fe.perspectiveSkip === 'cropped'
+      ? '잘라낸 사진이라 촬영 화각을 알 수 없어 원근 보정 없이 분석했습니다. 셀카라면 카메라로 직접 찍을 때 더 정확합니다.'
+      : '사진에 촬영 정보가 없어 원근 보정 없이 분석했습니다. 셀카라면 카메라로 직접 찍을 때 더 정확합니다.';
   $('#type-strengths').innerHTML = t.strengths.map(x => `<li>${x}</li>`).join('');
   $('#type-career').textContent = t.career;
   $('#type-lucky').textContent = `${t.lucky.color} · ${t.lucky.direction} · ${t.lucky.season}`;
@@ -664,7 +726,8 @@ async function drawCard() {
   const c = document.createElement('canvas');
   const ctx = c.getContext('2d');
   ctx.font = `28px ${sans}`;
-  const descLines = wrapLines(ctx, t.desc, IW);
+  const sh = r.shape.primary;
+  const descLines = wrapLines(ctx, sh.text, IW);
   const PW = 560, PH = Math.round(PW * photo.height / photo.width);
   const H = PAD + 150 + PH + 60 + 70 + descLines.length * 44 + 50 + r.fortune.ranked.length * 86 + 90;
   c.width = W; c.height = H;
@@ -678,7 +741,7 @@ async function drawCard() {
   ctx.fillStyle = '#d4af37'; ctx.font = `900 58px ${serif}`;
   ctx.fillText('관상 판독 결과', W / 2, PAD + 52);
   ctx.fillStyle = '#e7e2d4'; ctx.font = `500 30px ${sans}`;
-  ctx.fillText(`${t.name} · ${t.keyword}`, W / 2, PAD + 108);
+  ctx.fillText(`${sh.char} ${sh.name} · ${t.name}`, W / 2, PAD + 108);
 
   const px = (W - PW) / 2, py = PAD + 150;
   ctx.save(); roundRect(ctx, px, py, PW, PH, 28); ctx.clip(); ctx.drawImage(photo, px, py, PW, PH); ctx.restore();

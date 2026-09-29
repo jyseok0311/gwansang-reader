@@ -3,7 +3,7 @@
 //
 // 실행 순서
 //   1) node tools/calibrate-population.mjs            → POP(중앙값·표준편차) 출력 → physiognomy.js 의 POP 에 붙여넣기
-//   2) node tools/calibrate-population.mjs --offsets  → 얼굴형·운세 균형 보정값 출력 → physiognomy.js 의 FACE_TYPE_OFFSET, FORTUNE_OFFSET 에 붙여넣기
+//   2) node tools/calibrate-population.mjs --offsets  → 균형 보정값 출력 → physiognomy.js 의 FACE_TYPE_OFFSET, FORTUNE_OFFSET, SIPJA_NORM 에 붙여넣기
 //   3) node tools/calibrate-population.mjs --check    → 현재 기준값으로 표본을 채점해 분포 확인
 import { readFileSync } from 'node:fs';
 
@@ -14,7 +14,8 @@ const MAX_PITCH = 16;
 const SMILE_MOUTH_FACTOR = 1.2;
 const SMILE_THRESHOLD = 0.5;
 const KEYS = ['faceRatio', 'upperRatio', 'middleRatio', 'lowerRatio', 'foreheadWidthRatio', 'jawRatio', 'chinLen', 'eyeSize', 'eyeOpen', 'eyeTilt',
-  'interEye', 'glabella', 'browArch', 'browLen', 'browEyeGap', 'underEye', 'noseLen', 'noseWidth', 'philtrum', 'mouthWidth', 'lipThick', 'symmetry'];
+  'interEye', 'glabella', 'browArch', 'browLen', 'browEyeGap', 'underEye', 'noseLen', 'noseWidth', 'philtrum', 'mouthWidth', 'lipThick',
+  'jawAngle', 'chinWidth', 'symmetry'];
 
 const { rows } = JSON.parse(readFileSync(new URL('./population-sample.json', import.meta.url), 'utf8'));
 const used = rows
@@ -27,31 +28,38 @@ const fmt = (o) => Object.entries(o).map(([k, v]) => `${k}: ${Array.isArray(v) ?
 
 if (process.argv.includes('--check')) {
   const { analyze } = await import('../physiognomy.js');
-  const types = {}, best = {}, avgs = [];
+  const types = {}, best = {}, avgs = [], shapes = {};
   for (const r of used) {
     const res = analyze({ ...r.f, pose: { yaw: r.f.yaw, pitch: r.f.pitch, roll: 0 } });
     types[res.type.primary.hanja] = (types[res.type.primary.hanja] || 0) + 1;
+    if (Number.isFinite(r.f.jawAngle)) shapes[res.shape.primary.char] = (shapes[res.shape.primary.char] || 0) + 1;
     best[res.fortune.best.name] = (best[res.fortune.best.name] || 0) + 1;
     avgs.push(res.fortune.avg);
     console.log(r.id, res.type.primary.hanja + res.type.secondary.hanja, '종합', res.fortune.avg,
       res.fortune.ranked.map(f => f.name[0] + f.score).join(' '), '삼정', res.samjeong.stages.map(s => s.idx).join('/'));
   }
   console.log(`\n표본 ${used.length}명 · 종합점수 ${Math.min(...avgs)}~${Math.max(...avgs)}`);
-  console.log('얼굴형 분포', types, '\n1위 운', best);
+  console.log('오행 분포', types, '\n십자면상 분포 (턱 측정값이 있는 표본)', shapes, '\n1위 운', best);
 } else if (process.argv.includes('--offsets')) {
-  const { faceTypeScores, fortuneZ, analyzeSamjeong } = await import('../physiognomy.js');
+  const { faceTypeScores, fortuneZ, analyzeSamjeong, sipjaScores } = await import('../physiognomy.js');
   const mean = (fn) => {
     const sum = {};
-    for (const r of used) for (const [k, v] of Object.entries(fn(r.f))) sum[k] = (sum[k] || 0) + v;
-    return Object.fromEntries(Object.entries(sum).map(([k, v]) => [k, +(v / used.length).toFixed(3)]));
+    const n = {};
+    for (const r of used) for (const [k, v] of Object.entries(fn(r.f))) if (Number.isFinite(v)) { sum[k] = (sum[k] || 0) + v; n[k] = (n[k] || 0) + 1; }
+    return Object.fromEntries(Object.entries(sum).map(([k, v]) => [k, +(v / n[k]).toFixed(3)]));
   };
   console.log(`// 표본 ${used.length}명 기준`);
   console.log(`const FACE_TYPE_OFFSET = { ${fmt(mean(faceTypeScores))} };`);
   console.log(`const FORTUNE_OFFSET = { ${fmt(mean(f => fortuneZ(f, analyzeSamjeong(f))))} };`);
+  // 십자면상은 평균과 표준편차로 표준화한다
+  const sm = mean(sipjaScores), sq = {}, sn = {};
+  for (const r of used) for (const [k, v] of Object.entries(sipjaScores(r.f))) if (Number.isFinite(v)) { sq[k] = (sq[k] || 0) + (v - sm[k]) ** 2; sn[k] = (sn[k] || 0) + 1; }
+  const norm = Object.fromEntries(Object.keys(sm).map(k => [k, [sm[k], +Math.sqrt(sq[k] / sn[k]).toFixed(3)]]));
+  console.log(`const SIPJA_NORM = { ${fmt(norm)} };`);
 } else {
   const pop = {};
   for (const k of KEYS) {
-    const vals = used.map(r => r.f[k]);
+    const vals = used.map(r => r.f[k]).filter(Number.isFinite);   // 예전 표본에는 없는 측정값이 있다
     const m = median(vals);
     pop[k] = [+m.toFixed(4), +std(vals, m).toFixed(4)];
   }
