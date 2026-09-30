@@ -122,5 +122,7 @@ export function interpretPalm(palm) {
     social: combine([[0.30, g(F.heart, 'zLen')], [0.35, zSpread], [0.35, g(F.heart, 'zDev')]]),
   };
   const fortunes = Object.fromEntries(Object.entries(zs).map(([k, v]) => [k, score(v)]));
-  return { shape, readings, finger, thumb, fortunes, fateClear };
+  // 선별 그래프용: 선이 길고 또렷할수록 높다 (선을 못 찾으면 null)
+  const lineScores = Object.fromEntries(['heart', 'head', 'life', 'fate'].map(k => [k, F[k] ? score(0.5 * F[k].zLen + 0.5 * F[k].zClr) : null]));
+  return { shape, readings, finger, thumb, fortunes, fateClear, lineScores };
 }

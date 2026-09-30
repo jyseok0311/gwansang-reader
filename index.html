@@ -191,6 +191,12 @@
         <div id="shape-top" class="shape-top" aria-label="가까운 얼굴 윤곽 세 가지"></div>
       </div>
 
+      <h3 class="sec"><span>圖</span>운세 그래프</h3>
+      <div class="chart-grid">
+        <div class="chart-card"><h4>인생 영역별 운세</h4><canvas id="face-radar" class="chart radar" role="img"></canvas></div>
+        <div class="chart-card"><h4>인생의 흐름 (초년 → 말년)</h4><canvas id="face-flow" class="chart flow" role="img"></canvas></div>
+      </div>
+
       <h3 class="sec"><span>三停</span>인생의 흐름</h3>
       <div id="samjeong" class="samjeong"></div>
       <p id="samjeong-balance" class="note"></p>
@@ -277,6 +283,12 @@
       <div id="el-bars" class="el-bars"></div>
       <div id="el-texts" class="el-texts"></div>
 
+      <h3 class="sec"><span>圖</span>사주 그래프</h3>
+      <div class="chart-grid">
+        <div class="chart-card"><h4>오행 구성도</h4><canvas id="saju-elmap" class="chart elmap" role="img"></canvas><p class="chart-hint">노란 실선 화살표는 서로 살리는 상생, 붉은 점선은 서로 누르는 상극입니다. 원의 크기는 글자 수입니다.</p></div>
+        <div class="chart-card"><h4>인생 영역별 운세</h4><canvas id="saju-radar" class="chart radar" role="img"></canvas></div>
+      </div>
+
       <h3 class="sec"><span>十星</span>기운의 쓰임</h3>
       <div id="gods" class="gods"></div>
 
@@ -319,6 +331,12 @@
       </div>
       <div id="palm-quality" class="note hidden"></div>
 
+      <h3 class="sec"><span>圖</span>손금 그래프</h3>
+      <div class="chart-grid">
+        <div class="chart-card"><h4>네 선의 뚜렷함·길이</h4><canvas id="palm-line-radar" class="chart radar" role="img"></canvas></div>
+        <div class="chart-card"><h4>인생 영역별 운세</h4><canvas id="palm-radar" class="chart radar" role="img"></canvas></div>
+      </div>
+
       <h3 class="sec"><span>主線</span>선별 풀이</h3>
       <div id="palm-readings" class="parts"></div>
 
@@ -340,6 +358,19 @@
         <div class="combo-score"><b id="combo-avg">0</b><span>점</span></div>
         <div id="combo-grade" class="combo-grade"></div>
         <div id="combo-sources" class="combo-sources"></div>
+      </div>
+
+      <h3 class="sec"><span>立體</span>운명 구성도 · 3D</h3>
+      <div class="chart-card wide">
+        <canvas id="combo-orrery" class="chart orrery" role="img" tabindex="0"></canvas>
+        <div id="combo-orrery-legend" class="chart-legend"></div>
+        <p class="chart-hint">좌우로 끌어 돌려 보세요. 사주 → 손금 → 관상 → 종합 순으로 층이 쌓이고, 층마다 다섯 가지 운의 높이를 보여 줍니다. 위아래로 이어진 선이 기울수록 세 방면의 해석이 엇갈린다는 뜻입니다.</p>
+      </div>
+
+      <h3 class="sec"><span>圖</span>인생 영역별 겹쳐 보기</h3>
+      <div class="chart-grid">
+        <div class="chart-card"><h4>다섯 가지 운</h4><canvas id="combo-radar" class="chart radar" role="img"></canvas><div id="combo-radar-legend" class="chart-legend"></div></div>
+        <div class="chart-card"><h4>오행 구성도</h4><canvas id="combo-elmap" class="chart elmap" role="img"></canvas><p class="chart-hint">관상(相)·손금(手)·사주(命)가 각각 어느 오행에 앉는지, 그리고 서로 살리고(실선) 누르는(점선) 관계를 보여 줍니다.</p></div>
       </div>
 
       <h3 class="sec"><span>五行</span>세 방면의 기운</h3>

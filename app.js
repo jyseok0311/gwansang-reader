@@ -839,6 +839,7 @@ function renderResult(r) {
 
   // 총평
   $('#summary').innerHTML = summary.map(x => `<p>${x}</p>`).join('');
+  V.renderFaceCharts(r);
 }
 function animateMeters() {
   setTimeout(() => {

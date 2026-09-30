@@ -4,12 +4,87 @@
 import { ELEMENTS, STEMS, BRANCHES } from './saju.js';
 import { FORTUNE_KEYS, FORTUNE_NAMES, relation } from './fusion.js';
 import { wrapLines, roundRect, $, clampN, esc } from './util.js';
+import { SRC_COLOR, mountChart, createOrrery, drawRadar, drawFlow, drawElementMap, renderRadarImage } from './charts.js';
 
 const ICON = { wealth: '🪙', love: '💞', career: '🏛️', health: '🌿', social: '🤝' };
 const LEVEL = (n) => (n >= 88 ? '大吉' : n >= 78 ? '吉' : n >= 68 ? '中吉' : '平');
 const SRC = { face: '관상', palm: '손금', saju: '사주' };
 const elColor = (k) => ELEMENTS[k].color;
 const glyphEl = (k) => `--c:${elColor(k)}`;
+
+// ── 그래프 ───────────────────────────────────────────────────
+const AXES = FORTUNE_KEYS.map(k => ({ key: k, label: { wealth: '재물', love: '애정', career: '직업', health: '건강', social: '대인' }[k] }));
+const legend = (items) => items.map(([c, t]) => `<span><i style="background:${c}"></i>${t}</span>`).join('');
+const vals = (m) => FORTUNE_KEYS.map(k => m[k]);
+const aria = (title, names, values) => `${title}: ` + names.map((n, i) => `${n} ${values[i]}점`).join(', ');
+
+/** 관상 결과: 다섯 운 레이더 + 삼정(초년·중년·말년) 흐름선 */
+export function renderFaceCharts(r) {
+  const v = FORTUNE_KEYS.map(k => r.fortune.fortunes[k].score);
+  const radar = $('#face-radar');
+  radar.setAttribute('aria-label', aria('관상으로 본 인생 영역별 점수', AXES.map(a => a.label), v));
+  mountChart(radar, (ctx, w, h, k) => drawRadar(ctx, w, h, k, { axes: AXES, series: [{ color: SRC_COLOR.face, values: v, glow: true }] }));
+  const st = r.samjeong.stages;
+  const flow = $('#face-flow');
+  flow.setAttribute('aria-label', '인생의 흐름: ' + st.map(x => `${x.period.split(' · ')[0]} ${x.idx}`).join(', '));
+  mountChart(flow, (ctx, w, h, k) => drawFlow(ctx, w, h, k, {
+    points: st.map(x => ({ name: x.period.split(' · ')[0], sub: x.period.split(' · ')[1], value: x.idx, best: x.key === r.samjeong.best.key })),
+  }));
+}
+
+/** 손금 결과: 네 선의 세기 레이더 + 다섯 운 레이더 */
+function renderPalmCharts(r) {
+  const lineAxes = [{ label: '감정선' }, { label: '두뇌선' }, { label: '생명선' }, { label: '운명선' }];
+  const lv = ['heart', 'head', 'life', 'fate'].map(k => r.lineScores[k] ?? 40);
+  const lr = $('#palm-line-radar');
+  lr.setAttribute('aria-label', aria('손금 네 선의 뚜렷함과 길이', lineAxes.map(a => a.label), lv));
+  mountChart(lr, (ctx, w, h, k) => drawRadar(ctx, w, h, k, { axes: lineAxes, series: [{ color: SRC_COLOR.palm, values: lv, glow: true }] }));
+  const v = vals(r.fortunes), fr = $('#palm-radar');
+  fr.setAttribute('aria-label', aria('손금으로 본 인생 영역별 점수', AXES.map(a => a.label), v));
+  mountChart(fr, (ctx, w, h, k) => drawRadar(ctx, w, h, k, { axes: AXES, series: [{ color: SRC_COLOR.palm, values: v, glow: true }] }));
+}
+
+/** 사주 결과: 오행 구성도 + 다섯 운 레이더 */
+function renderSajuCharts(r) {
+  const em = $('#saju-elmap');
+  em.setAttribute('aria-label', '오행 분포: ' + Object.entries(r.counts).map(([k, n]) => `${ELEMENTS[k].name} ${n}글자`).join(', '));
+  mountChart(em, (ctx, w, h, k) => drawElementMap(ctx, w, h, k, { markers: [{ src: 'saju', el: r.dayMaster.el }], counts: r.counts }));
+  const v = vals(r.fortunes), fr = $('#saju-radar');
+  fr.setAttribute('aria-label', aria('사주로 본 인생 영역별 점수', AXES.map(a => a.label), v));
+  mountChart(fr, (ctx, w, h, k) => drawRadar(ctx, w, h, k, { axes: AXES, series: [{ color: SRC_COLOR.saju, values: v, glow: true }] }));
+}
+
+/** 종합 결과: 3D 운명 구성도 + 겹쳐 보는 레이더 + 오행 구성도 */
+function renderComboCharts(f, c) {
+  const by = (s) => FORTUNE_KEYS.map(k => f.fortunes.find(x => x.key === k).by[s]);
+  const all = FORTUNE_KEYS.map(k => f.fortunes.find(x => x.key === k).combined);
+  const order = ['saju', 'palm', 'face'].filter(s => f.has[s]);                    // 아래에서 위로: 바탕(사주) → 손 → 얼굴 → 종합
+  const layers = [...order.map(s => ({ label: SRC[s], color: SRC_COLOR[s], values: by(s) })), { label: '종합', color: SRC_COLOR.all, values: all, top: true }];
+  const series = [...order.map(s => ({ color: SRC_COLOR[s], values: by(s) })), { color: SRC_COLOR.all, values: all, glow: true }];
+  const text = (title) => aria(title, AXES.map(a => a.label), all);
+
+  const orr = $('#combo-orrery');
+  orr.setAttribute('aria-label', text('종합 점수 입체 그래프. 좌우 방향키로 돌릴 수 있습니다'));
+  createOrrery(orr, { axes: AXES, layers });
+  const rd = $('#combo-radar');
+  rd.setAttribute('aria-label', text('인생 영역별 종합 점수'));
+  mountChart(rd, (ctx, w, h, k) => drawRadar(ctx, w, h, k, { axes: AXES, series }));
+  const legends = legend([...order.map(s => [SRC_COLOR[s], SRC[s]]), [SRC_COLOR.all, '종합']]);
+  $('#combo-radar-legend').innerHTML = legends;
+  $('#combo-orrery-legend').innerHTML = legends;
+
+  const em = $('#combo-elmap');
+  const counts = c.saju ? c.saju.reading.counts : null;
+  em.setAttribute('aria-label', '세 방면의 오행 위치: ' + f.sources.map(s => `${SRC[s]} ${ELEMENTS[f.elems[s].key].name}`).join(', '));
+  mountChart(em, (ctx, w, h, k) => drawElementMap(ctx, w, h, k, { markers: f.sources.map(s => ({ src: s, el: f.elems[s].key })), counts }));
+}
+
+/** 결과 카드에 넣을 레이더 그림 */
+function comboRadarImage(f, size) {
+  const by = (s) => FORTUNE_KEYS.map(k => f.fortunes.find(x => x.key === k).by[s]);
+  const all = FORTUNE_KEYS.map(k => f.fortunes.find(x => x.key === k).combined);
+  return renderRadarImage(size, { axes: AXES, fs: 24, series: [...f.sources.map(s => ({ color: SRC_COLOR[s], values: by(s) })), { color: SRC_COLOR.all, values: all, glow: true }] });
+}
 
 // ── 사주 ─────────────────────────────────────────────────────
 const FORTUNE_BASIS = {
@@ -65,6 +140,7 @@ export function renderSaju(state) {
     return `<div class="fortune"><div class="f-head"><span class="f-icon" aria-hidden="true">${ICON[k]}</span><b>${FORTUNE_NAMES[k]}</b><span class="f-level ${sc >= 88 ? 'top' : ''}">${LEVEL(sc)}</span><span class="f-score">${sc}</span></div>
       <div class="meter gold"><i data-w="${sc}%" style="--w:0%"></i></div><p>${FORTUNE_BASIS[k]}을(를) 기준으로 계산한 점수입니다.</p></div>`;
   }).join('');
+  renderSajuCharts(r);
   animate('#view-saju');
 }
 
@@ -140,6 +216,7 @@ export function renderPalm(palm, srcCanvas) {
     return `<div class="fortune"><div class="f-head"><span class="f-icon" aria-hidden="true">${ICON[k]}</span><b>${FORTUNE_NAMES[k]}</b><span class="f-level ${sc >= 88 ? 'top' : ''}">${LEVEL(sc)}</span><span class="f-score">${sc}</span></div>
       <div class="meter gold"><i data-w="${sc}%" style="--w:0%"></i></div></div>`;
   }).join('');
+  renderPalmCharts(r);
   animate('#view-palm');
 }
 
@@ -174,6 +251,7 @@ export function renderCombo(f, c) {
   }).join('');
   $('#combo-summary').innerHTML = f.summary.map(t => `<p>${esc(t)}</p>`).join('');
   $('#dl-face').disabled = !c.face; $('#dl-palm').disabled = !c.palm; $('#dl-saju').disabled = !c.saju;
+  renderComboCharts(f, c);
   animate('#view-combo');
 }
 
@@ -192,7 +270,8 @@ export async function drawComboCard(f, c, palmCanvas) {
   const hasPalm = !!(c.palm && palmCanvas), hasSaju = !!c.saju;
   const PH = hasPalm ? 380 : 0;
   // 위에서부터 쌓이는 높이: 제목, 사주 글자, 세 오행, 종합 점수, 손바닥 사진, 요약 글, 다섯 운 막대, 맨 아래 안내
-  const H = PAD + 150 + (hasSaju ? 300 : 0) + 200 + 150 + (hasPalm ? PH + 40 : 0) + lead.length * 44 + 40 + f.ranked.length * 100 + 90;
+  const RS = 520;   // 레이더 그림 한 변
+  const H = PAD + 150 + (hasSaju ? 300 : 0) + 200 + 150 + RS + 30 + (hasPalm ? PH + 40 : 0) + lead.length * 44 + 40 + f.ranked.length * 100 + 90;
   cv.width = W; cv.height = H;
   ctx.fillStyle = '#05060a'; ctx.fillRect(0, 0, W, H);
   const g = ctx.createRadialGradient(W / 2, 0, 50, W / 2, 0, W); g.addColorStop(0, 'rgba(255,178,77,0.2)'); g.addColorStop(1, 'rgba(255,178,77,0)');
@@ -236,6 +315,17 @@ export async function drawComboCard(f, c, palmCanvas) {
   ctx.textAlign = 'center'; ctx.fillStyle = '#ffd08a'; ctx.font = `900 96px ${serif}`; ctx.fillText(`${f.avg}점`, W / 2, y + 60);
   ctx.fillStyle = '#e7e2d4'; ctx.font = `700 34px ${serif}`; ctx.fillText(f.grade, W / 2, y + 112);
   y += 150;
+  {   // 인생 영역별 레이더 (세 방면과 종합을 겹쳐서)
+    ctx.drawImage(comboRadarImage(f, RS), (W - RS) / 2, y, RS, RS);
+    y += RS + 14;
+    const items = [...f.sources.map(s => [SRC_COLOR[s], SRC[s]]), [SRC_COLOR.all, '종합']];
+    ctx.font = `500 24px ${sans}`;
+    const tw = items.map(([, t]) => ctx.measureText(t).width + 40), total = tw.reduce((a, b) => a + b, 0);
+    let lx = (W - total) / 2; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    items.forEach(([c, t], i) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(lx + 8, y + 4, 8, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#c8cbd6'; ctx.fillText(t, lx + 24, y + 4); lx += tw[i]; });
+    ctx.textBaseline = 'alphabetic';
+    y += 16;
+  }
   if (hasPalm) {
     const pw = Math.min(IW, PH * palmCanvas.width / palmCanvas.height), px = (W - pw) / 2;
     ctx.save(); roundRect(ctx, px, y, pw, PH, 26); ctx.clip(); ctx.drawImage(palmCanvas, px, y, pw, PH); ctx.restore();
