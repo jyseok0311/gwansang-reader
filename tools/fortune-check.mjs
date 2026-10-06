@@ -8,7 +8,7 @@ import { biorhythm } from '../biorhythm.js';
 import { computeMatch } from '../match.js';
 import { classifyAnimal } from '../animal-face.js';
 import { POP } from '../physiognomy.js';
-import { MAJOR, drawCards, readSpread } from '../tarot.js';
+import { MAJOR, MINOR, FULL, drawCards, readSpread } from '../tarot.js';
 import { buildReport } from '../report.js';
 import { analyze } from '../physiognomy.js';
 import { QUESTIONS, TYPES, scoreAnswers, axesFromCode, partners } from '../mbti.js';
@@ -56,8 +56,14 @@ const d1 = drawCards('five', { who: 'a', question: '질문', date: new Date(2026
 ok(JSON.stringify(d1.map(x => [x.card.n, x.rev])) === JSON.stringify(d2.map(x => [x.card.n, x.rev])), '같은 날·같은 질문이면 같은 카드');
 ok(new Set(d1.map(x => x.card.n)).size === 5, '한 번에 뽑은 카드는 서로 다름');
 ok(JSON.stringify(drawCards('five', { who: 'a', question: '다른 질문', date: new Date(2026, 9, 6) }).map(x => x.card.n)) !== JSON.stringify(d1.map(x => x.card.n)), '질문이 다르면 다른 카드');
-const cnt = new Array(22).fill(0); for (let i = 0; i < 2000; i++) cnt[drawCards('one', { who: 'u' + i })[0].card.n]++;
-ok(Math.min(...cnt) > 55 && Math.max(...cnt) < 130, `카드가 고르게 나옴 (${Math.min(...cnt)}~${Math.max(...cnt)}회)`);
+const cnt = new Array(22).fill(0); for (let i = 0; i < 2000; i++) cnt[drawCards('one', { who: 'u' + i, deck: 'major' })[0].card.n]++;
+ok(Math.min(...cnt) > 55 && Math.max(...cnt) < 130, `메이저 22장이 고르게 나옴 (${Math.min(...cnt)}~${Math.max(...cnt)}회)`);
+ok(MINOR.length === 56 && FULL.length === 78 && new Set(FULL.map(c => c.n)).size === 78 && new Set(FULL.map(c => c.name)).size === 78, '마이너 56장 + 메이저 22장 = 78장, 번호·이름 중복 없음');
+ok(MINOR.every(c => c.kw.length === 2 && c.up && c.rev && c.advice && Number.isFinite(c.e) && c.label && c.sym), '마이너 카드 데이터 완비(키워드·정/역 풀이·조언·기운)');
+ok(['완드', '컵', '소드', '펜타클'].every(su => MINOR.filter(c => c.suit === su).length === 14), '네 슈트 각 14장');
+ok(drawCards('five', { who: 'm', deck: 'major' }).every(x => !x.card.minor), '메이저만 고르면 마이너가 나오지 않음');
+const cnt78 = new Map(); for (let i = 0; i < 4000; i++) { const c = drawCards('one', { who: 'f' + i })[0].card.n; cnt78.set(c, (cnt78.get(c) || 0) + 1); }
+ok(cnt78.size === 78 && Math.min(...cnt78.values()) > 25 && Math.max(...cnt78.values()) < 85, `전체 78장이 고르게 나옴 (${Math.min(...cnt78.values())}~${Math.max(...cnt78.values())}회)`);
 ok(['one', 'three', 'five'].every(k => readSpread(k, drawCards(k, { who: 'z' })).summary.length >= 2), '세 스프레드 모두 풀이 생성');
 // MBTI: 20문항(축당 5), 16유형 데이터 완비, 전부 a면 ESTJ, 전부 b면 INFP, 보완 유형 규칙
 ok(QUESTIONS.length === 20 && [0, 1, 2, 3].every(a => QUESTIONS.filter(q => q[0] === a).length === 5), 'MBTI 문항 20개(축당 5개)');

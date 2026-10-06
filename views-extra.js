@@ -9,7 +9,7 @@ import { classifyAnimal, ANIMALS } from './animal-face.js';
 import { computeMatch, MATCH_AXES } from './match.js';
 import { ELEMENTS as ELM } from './saju.js';
 import { computeSaju, interpretSaju } from './saju.js';
-import { SPREADS, drawCards, readSpread } from './tarot.js';
+import { SPREADS, DECKS, drawCards, readSpread, faceLabel } from './tarot.js';
 import { QUESTIONS, AXES as MB_AXES, TYPES, scoreAnswers, axesFromCode, partners, crossReading } from './mbti.js';
 
 const ICON = { wealth: '🪙', love: '💞', career: '🏛️', health: '🌿', social: '🤝' };
@@ -307,8 +307,7 @@ function renderMatch(ctx) {
 }
 
 // ── 타로 ─────────────────────────────────────────────────────
-const tarot = { spread: 'one', question: '', drawn: null, reading: null, flipped: [] };
-const ROMAN = ['0', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX', 'XXI'];
+const tarot = { spread: 'one', deck: 'full', question: '', drawn: null, reading: null, flipped: [] };
 function whoKey(ctx) {
   if (ctx.saju) { const s = ctx.saju.saju.solar; return `${s.year}-${s.month}-${s.day}`; }
   try { let id = localStorage.getItem('gwansang.tid'); if (!id) { id = Math.random().toString(36).slice(2); localStorage.setItem('gwansang.tid', id); } return id; } catch { return 'anon'; }
@@ -324,7 +323,7 @@ function tarotSlotsHtml() {
   const n = tarot.drawn.length;
   return `<div class="tslots n${n}">${tarot.drawn.map((c, i) => `<div class="tslot"><button type="button" class="tcard${tarot.flipped[i] ? ' flipped' : ''}" data-ti="${i}" aria-label="${esc(c.pos)} 카드 뒤집기">
       <div class="tinner"><div class="tface back" aria-hidden="true"><span>運</span></div>
-      <div class="tface front"><div class="tc${c.rev ? ' rev' : ''}"><small>${ROMAN[c.card.n]}</small><b>${c.card.sym}</b><span>${esc(c.card.name)}</span></div></div></div></button><em class="tpos">${esc(c.pos)}</em></div>`).join('')}</div>
+      <div class="tface front"><div class="tc${c.rev ? ' rev' : ''}"><small>${esc(faceLabel(c.card))}</small><b>${c.card.sym}</b><span>${esc(c.card.name)}</span></div></div></div></button><em class="tpos">${esc(c.pos)}</em></div>`).join('')}</div>
     <div class="tbtns"><button type="button" class="ghost" id="tr-all">모두 뒤집기</button></div>`;
 }
 function paintTarotReading() {
@@ -349,16 +348,19 @@ function renderTarot(ctx) {
   const root = $('#extra-tarot');
   root.innerHTML = `
     <div class="astro-card"><p>마음속 질문을 떠올리고 카드를 뽑아 보세요. 같은 날 같은 질문이면 같은 카드가 나오고, 질문을 바꾸면 새 카드가 나옵니다.</p></div>
+    <fieldset class="seg tr-deck"><legend class="sr">덱</legend>${Object.values(DECKS).map(d => `<label><input type="radio" name="trd" value="${d.key}"${tarot.deck === d.key ? ' checked' : ''}><span>${esc(d.name)}</span></label>`).join('')}</fieldset>
     <fieldset class="seg three tr-seg"><legend class="sr">스프레드</legend>${Object.values(SPREADS).map(sp => `<label><input type="radio" name="trs" value="${sp.key}"${tarot.spread === sp.key ? ' checked' : ''}><span>${esc(sp.name)}<small>${sp.positions.length}장</small></span></label>`).join('')}</fieldset>
     <label class="pm-field" style="margin-top:12px">질문 (선택)<input id="tr-q" type="text" maxlength="40" placeholder="예: 이번 주 면접은 어떨까요?" value="${esc(tarot.question)}"></label>
     <button class="primary big" type="button" id="tr-draw" style="width:100%;margin-top:12px">🔮 카드 뽑기</button>
     <div id="tr-table">${tarot.drawn ? tarotSlotsHtml() : ''}</div><div id="tr-reading"></div>`;
   const flip = (i) => { if (tarot.flipped[i]) return; tarot.flipped[i] = true; const el = root.querySelector(`[data-ti="${i}"]`); el?.classList.add('flipped'); paintTarotReading(); };
-  root.querySelectorAll('input[name="trs"]').forEach(r => r.addEventListener('change', () => { tarot.spread = r.value; tarot.drawn = tarot.reading = null; tarot.flipped = []; $('#tr-table').innerHTML = ''; $('#tr-reading').innerHTML = ''; syncSave(); }));
+  const resetDraw = () => { tarot.drawn = tarot.reading = null; tarot.flipped = []; $('#tr-table').innerHTML = ''; $('#tr-reading').innerHTML = ''; syncSave(); };
+  root.querySelectorAll('input[name="trs"]').forEach(r => r.addEventListener('change', () => { tarot.spread = r.value; resetDraw(); }));
+  root.querySelectorAll('input[name="trd"]').forEach(r => r.addEventListener('change', () => { tarot.deck = r.value; resetDraw(); }));
   $('#tr-q').addEventListener('input', (e) => { tarot.question = e.target.value; });
   $('#tr-draw').addEventListener('click', () => {
     tarot.question = $('#tr-q').value;
-    tarot.drawn = drawCards(tarot.spread, { who: whoKey(ctx), question: tarot.question });
+    tarot.drawn = drawCards(tarot.spread, { who: whoKey(ctx), question: tarot.question, deck: tarot.deck });
     tarot.reading = readSpread(tarot.spread, tarot.drawn); tarot.flipped = tarot.drawn.map(() => false);
     $('#tr-table').innerHTML = tarotSlotsHtml(); $('#tr-reading').innerHTML = ''; syncSave();
     $('#tr-table').scrollIntoView?.({ behavior: 'smooth', block: 'center' });
@@ -518,7 +520,7 @@ export async function drawAnimalCard(face) {
 export async function drawTarotCard() {
   const r = tarot.reading, sp = SPREADS[tarot.spread];
   return drawCard({
-    title: '오늘의 타로', sub: `${sp.name}${tarot.question.trim() ? ' · ' + tarot.question.trim() : ''}`, big: r.cards.map(c => c.card.sym).join('  '), bigFont: r.cards.length > 3 ? 100 : 140,
+    title: '오늘의 타로', sub: `${sp.name} · ${DECKS[tarot.deck].name}${tarot.question.trim() ? ' · ' + tarot.question.trim() : ''}`, big: r.cards.map(c => c.card.sym).join('  '), bigFont: r.cards.length > 3 ? 100 : 140,
     bigSub: r.cards.length === 1 ? `${r.cards[0].card.name} · ${r.cards[0].orient}` : r.cards.map(c => c.card.name).join(' · '),
     para: r.summary.join(' '), bars: r.cards.map(c => ({ label: `${c.pos} · ${c.card.name} (${c.orient})`, text: tarot.spread === 'five' ? String(c.score) : '', frac: c.score / 100 })),
   });

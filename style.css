@@ -700,3 +700,7 @@ canvas.chart.donut { aspect-ratio: 1 / 1; max-width: 260px; margin: 0 auto; }
 .combo-sources span:not(.on) { opacity: .5; }
 
 canvas.chart.heat { aspect-ratio: 16 / 9; }
+
+.tr-deck { margin: 12px 0 0; }
+.tr-deck span { min-height: 44px; font-size: .88rem; }
+.tc span { word-break: keep-all; }
