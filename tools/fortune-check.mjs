@@ -8,6 +8,8 @@ import { biorhythm } from '../biorhythm.js';
 import { computeMatch } from '../match.js';
 import { classifyAnimal } from '../animal-face.js';
 import { POP } from '../physiognomy.js';
+import { MAJOR, drawCards, readSpread } from '../tarot.js';
+import { QUESTIONS, TYPES, scoreAnswers, axesFromCode, partners } from '../mbti.js';
 
 let bad = 0;
 const ok = (cond, msg) => { if (!cond) { bad++; console.log('✗', msg); } else console.log('✓', msg); };
@@ -46,5 +48,19 @@ const catish = classifyAnimal({ ...avgFace, eyeTilt: POP.eyeTilt[0] + 3 * POP.ey
 ok(['cat', 'fox'].includes(catish.primary.key), `눈꼬리가 올라가고 턱 끝이 뾰족하면 고양이·여우상 (${catish.primary.name})`);
 const doggish = classifyAnimal({ ...avgFace, eyeTilt: POP.eyeTilt[0] - 3 * POP.eyeTilt[1], eyeOpen: POP.eyeOpen[0] + 2 * POP.eyeOpen[1] });
 ok(doggish.primary.key === 'dog' || doggish.primary.key === 'deer', `눈꼬리가 처지고 눈이 동그라면 강아지·사슴상 (${doggish.primary.name})`);
+// 타로: 22장, 같은 날·사람·질문이면 같은 카드, 질문이 다르면 다른 카드, 한 스프레드에 같은 카드 중복 없음
+ok(MAJOR.length === 22 && MAJOR.every(c => c.kw.length === 2 && c.love.length === 2 && c.work.length === 2 && c.money.length === 2), '타로 메이저 아르카나 22장 데이터 완비');
+const d1 = drawCards('five', { who: 'a', question: '질문', date: new Date(2026, 9, 6) }), d2 = drawCards('five', { who: 'a', question: '질문', date: new Date(2026, 9, 6, 23) });
+ok(JSON.stringify(d1.map(x => [x.card.n, x.rev])) === JSON.stringify(d2.map(x => [x.card.n, x.rev])), '같은 날·같은 질문이면 같은 카드');
+ok(new Set(d1.map(x => x.card.n)).size === 5, '한 번에 뽑은 카드는 서로 다름');
+ok(JSON.stringify(drawCards('five', { who: 'a', question: '다른 질문', date: new Date(2026, 9, 6) }).map(x => x.card.n)) !== JSON.stringify(d1.map(x => x.card.n)), '질문이 다르면 다른 카드');
+const cnt = new Array(22).fill(0); for (let i = 0; i < 2000; i++) cnt[drawCards('one', { who: 'u' + i })[0].card.n]++;
+ok(Math.min(...cnt) > 55 && Math.max(...cnt) < 130, `카드가 고르게 나옴 (${Math.min(...cnt)}~${Math.max(...cnt)}회)`);
+ok(['one', 'three', 'five'].every(k => readSpread(k, drawCards(k, { who: 'z' })).summary.length >= 2), '세 스프레드 모두 풀이 생성');
+// MBTI: 20문항(축당 5), 16유형 데이터 완비, 전부 a면 ESTJ, 전부 b면 INFP, 보완 유형 규칙
+ok(QUESTIONS.length === 20 && [0, 1, 2, 3].every(a => QUESTIONS.filter(q => q[0] === a).length === 5), 'MBTI 문항 20개(축당 5개)');
+ok(Object.keys(TYPES).length === 16 && Object.values(TYPES).every(t => t.nick && t.kw.length === 3 && t.desc && t.strength && t.weak && t.love && t.work && t.stress && t.tip), '16유형 풀이 데이터 완비');
+ok(scoreAnswers(QUESTIONS.map(() => 'a')).code === 'ESTJ' && scoreAnswers(QUESTIONS.map(() => 'b')).code === 'INFP', '전부 앞 선택=ESTJ, 전부 뒤 선택=INFP');
+ok(partners('INFJ')[0] === 'ENFP' && partners('INFP').includes('ENTJ') && axesFromCode('ENTP').code === 'ENTP', '보완 유형 규칙');
 console.log(bad ? `\n실패 ${bad}건` : '\n모두 통과');
 process.exit(bad ? 1 : 0);

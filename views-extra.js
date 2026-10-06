@@ -8,6 +8,8 @@ import { biorhythm, CYCLES } from './biorhythm.js';
 import { classifyAnimal, ANIMALS } from './animal-face.js';
 import { computeMatch, MATCH_AXES } from './match.js';
 import { computeSaju, interpretSaju } from './saju.js';
+import { SPREADS, drawCards, readSpread, dayKey } from './tarot.js';
+import { QUESTIONS, AXES as MB_AXES, TYPES, scoreAnswers, axesFromCode, partners, crossReading } from './mbti.js';
 
 const ICON = { wealth: '🪙', love: '💞', career: '🏛️', health: '🌿', social: '🤝' };
 const SHORT = { wealth: '재물', love: '애정', career: '직업', health: '건강', social: '대인' };
@@ -270,20 +272,144 @@ function renderMatch(ctx) {
   return r;
 }
 
-const TABS = ['today', 'year', 'zodiac', 'bio', 'match', 'animal'];
-const SAVE_LABEL = { today: '💾 오늘 카드 저장', match: '💾 궁합 카드 저장', animal: '💾 동물상 카드 저장' };
+// ── 타로 ─────────────────────────────────────────────────────
+const tarot = { spread: 'one', question: '', drawn: null, reading: null, flipped: [] };
+const ROMAN = ['0', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX', 'XXI'];
+function whoKey(ctx) {
+  if (ctx.saju) { const s = ctx.saju.saju.solar; return `${s.year}-${s.month}-${s.day}`; }
+  try { let id = localStorage.getItem('gwansang.tid'); if (!id) { id = Math.random().toString(36).slice(2); localStorage.setItem('gwansang.tid', id); } return id; } catch { return 'anon'; }
+}
+const tarotDone = () => !!tarot.drawn && tarot.flipped.length === tarot.drawn.length && tarot.flipped.every(Boolean);
+function syncSave() {
+  const save = $('#extra-save'); if (!save) return;
+  const tab = document.querySelector('#extra-tabs button.on')?.dataset.tab;
+  if (tab === 'tarot') { save.classList.toggle('hidden', !tarotDone()); save.textContent = '💾 타로 카드 저장'; }
+  if (tab === 'mbti') { save.classList.toggle('hidden', !mbti.result); save.textContent = '💾 성향 카드 저장'; }
+}
+function tarotSlotsHtml() {
+  const n = tarot.drawn.length;
+  return `<div class="tslots n${n}">${tarot.drawn.map((c, i) => `<div class="tslot"><button type="button" class="tcard${tarot.flipped[i] ? ' flipped' : ''}" data-ti="${i}" aria-label="${esc(c.pos)} 카드 뒤집기">
+      <div class="tinner"><div class="tface back" aria-hidden="true"><span>運</span></div>
+      <div class="tface front"><div class="tc${c.rev ? ' rev' : ''}"><small>${ROMAN[c.card.n]}</small><b>${c.card.sym}</b><span>${esc(c.card.name)}</span></div></div></div></button><em class="tpos">${esc(c.pos)}</em></div>`).join('')}</div>
+    <div class="tbtns"><button type="button" class="ghost" id="tr-all">모두 뒤집기</button></div>`;
+}
+function paintTarotReading() {
+  const root = $('#tr-reading'); if (!root || !tarot.reading) return;
+  const items = tarot.reading.cards.map((c, i) => (tarot.flipped[i] ? `<div class="astro-card tr-item"><div class="astro-head"><span class="sym">${c.card.sym}</span><div><b>${esc(c.card.name)} · ${c.orient}</b><small>${esc(c.pos)} · ${esc(c.kw)}</small></div>${tarot.spread === 'five' ? `<span class="f-score tr-score">${c.score}</span>` : ''}</div>
+      <p>${esc(c.text)}</p><p class="tr-adv">${esc(c.extra)}</p></div>` : '')).join('');
+  let html = items;
+  if (tarotDone()) {
+    html += `<h3 class="sec"><span>解</span>종합 풀이</h3>`;
+    if (tarot.spread === 'five') html += `<div class="chart-card wide"><canvas id="tarot-radar" class="chart radar" role="img"></canvas></div>`;
+    html += `<div class="summary">${tarot.reading.summary.map(t => `<p>${esc(t)}</p>`).join('')}</div>`;
+  }
+  root.innerHTML = html;
+  if (tarotDone() && tarot.spread === 'five') {
+    const v = tarot.reading.scores, ax = ['재물', '애정', '직업', '건강', '대인'].map(label => ({ label }));
+    const cv = $('#tarot-radar'); cv.setAttribute('aria-label', '카드로 본 다섯 가지 운: ' + ax.map((a, i) => `${a.label} ${v[i]}점`).join(', '));
+    mountChart(cv, (c, w, h, k) => drawRadar(c, w, h, k, { axes: ax, series: [{ color: '#8a6bff', values: v, glow: true }] }));
+  }
+  syncSave();
+}
+function renderTarot(ctx) {
+  const root = $('#extra-tarot');
+  root.innerHTML = `
+    <div class="astro-card"><p>마음속 질문을 떠올리고 카드를 뽑아 보세요. 같은 날 같은 질문이면 같은 카드가 나오고, 질문을 바꾸면 새 카드가 나옵니다.</p></div>
+    <fieldset class="seg three tr-seg"><legend class="sr">스프레드</legend>${Object.values(SPREADS).map(sp => `<label><input type="radio" name="trs" value="${sp.key}"${tarot.spread === sp.key ? ' checked' : ''}><span>${esc(sp.name)}<small>${sp.positions.length}장</small></span></label>`).join('')}</fieldset>
+    <label class="pm-field" style="margin-top:12px">질문 (선택)<input id="tr-q" type="text" maxlength="40" placeholder="예: 이번 주 면접은 어떨까요?" value="${esc(tarot.question)}"></label>
+    <button class="primary big" type="button" id="tr-draw" style="width:100%;margin-top:12px">🔮 카드 뽑기</button>
+    <div id="tr-table">${tarot.drawn ? tarotSlotsHtml() : ''}</div><div id="tr-reading"></div>`;
+  const flip = (i) => { if (tarot.flipped[i]) return; tarot.flipped[i] = true; const el = root.querySelector(`[data-ti="${i}"]`); el?.classList.add('flipped'); paintTarotReading(); };
+  root.querySelectorAll('input[name="trs"]').forEach(r => r.addEventListener('change', () => { tarot.spread = r.value; tarot.drawn = tarot.reading = null; tarot.flipped = []; $('#tr-table').innerHTML = ''; $('#tr-reading').innerHTML = ''; syncSave(); }));
+  $('#tr-q').addEventListener('input', (e) => { tarot.question = e.target.value; });
+  $('#tr-draw').addEventListener('click', () => {
+    tarot.question = $('#tr-q').value;
+    tarot.drawn = drawCards(tarot.spread, { who: whoKey(ctx), question: tarot.question });
+    tarot.reading = readSpread(tarot.spread, tarot.drawn); tarot.flipped = tarot.drawn.map(() => false);
+    $('#tr-table').innerHTML = tarotSlotsHtml(); $('#tr-reading').innerHTML = ''; syncSave();
+    $('#tr-table').scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  });
+  root.onclick = (e) => {   // 탭을 다시 열 때마다 새로 달아도 겹치지 않도록 onclick 으로 한 번만 둔다
+    const c = e.target.closest('[data-ti]'); if (c) flip(+c.dataset.ti);
+    if (e.target.id === 'tr-all') tarot.drawn?.forEach((_, i) => setTimeout(() => flip(i), i * 220));
+  };
+  if (tarot.drawn) paintTarotReading();
+  syncSave();
+  return tarot;
+}
+
+// ── MBTI형 성향 검사 ─────────────────────────────────────────
+const mbti = { step: 'start', idx: 0, answers: [], result: null };
+function mbtiResultHtml(ctx) {
+  const R = mbti.result, T = TYPES[R.code], P = partners(R.code), cross = crossReading(R.code, ctx.saju);
+  return `
+    <div class="combo-hero zodiac-hero">
+      <div class="combo-hero-label">나의 성향 유형</div>
+      <div class="mb-code">${R.code.split('').map(c => `<b>${c}</b>`).join('')}</div>
+      <div class="combo-grade">${esc(T.nick)}</div>
+      <div class="combo-sources">${T.kw.map(k => `<span class="on">${esc(k)}</span>`).join('')}</div>
+    </div>
+    <h3 class="sec"><span>軸</span>네 가지 성향</h3>
+    <div class="mb-axes">${R.axes.map(a => `<div class="mb-ax"><div class="mb-labels"><span class="${a.pick === a.a ? 'on' : ''}"><b>${a.a}</b> ${a.aName} ${a.pa}%</span><span class="${a.pick === a.b ? 'on' : ''}">${a.bName} ${a.pb}% <b>${a.b}</b></span></div>
+      <div class="mb-track"><i style="width:${a.pa}%"></i><u style="width:${a.pb}%"></u></div></div>`).join('')}</div>
+    ${R.axes[0].direct ? '<p class="chart-hint">직접 고른 유형이라 각 축의 비율은 대략치로 표시했습니다.</p>' : ''}
+    <h3 class="sec"><span>貌</span>${esc(R.code)} 풀이</h3>
+    <div class="summary"><p>${esc(T.desc)}</p><p><b>강점</b> ${esc(T.strength)}</p><p><b>약점</b> ${esc(T.weak)}</p><p><b>연애</b> ${esc(T.love)}</p><p><b>일</b> ${esc(T.work)}</p><p><b>스트레스</b> ${esc(T.stress)}</p><p><b>성장 팁</b> ${esc(T.tip)}</p></div>
+    <h3 class="sec"><span>合</span>서로 보완되는 유형</h3>
+    <div class="compat">${P.map(c => `<div><small>${esc(TYPES[c].nick)}</small><b>${c}</b></div>`).join('')}</div>
+    ${cross ? `<h3 class="sec"><span>統</span>사주와 겹쳐 보기</h3><div class="summary"><p>${esc(cross)}</p></div>` : '<p class="chart-hint" style="text-align:center">생년월일을 입력하면 사주와 겹쳐 읽는 풀이도 볼 수 있어요.</p>'}
+    <div class="pm-actions"><button class="ghost" type="button" id="mb-reset">↺ 다시 하기</button></div>
+    <p class="chart-hint" style="text-align:center">이 앱에서 새로 만든 비공식 간이 검사이며 공식 MBTI® 검사와 무관한 오락용 결과입니다.</p>`;
+}
+function renderMbti(ctx) {
+  const root = $('#extra-mbti');
+  const finish = (res) => { mbti.result = res; mbti.step = 'result'; renderMbti(ctx); };
+  if (mbti.step === 'result' && mbti.result) { root.innerHTML = mbtiResultHtml(ctx); $('#mb-reset').addEventListener('click', () => { Object.assign(mbti, { step: 'start', idx: 0, answers: [], result: null }); renderMbti(ctx); }); syncSave(); return mbti.result; }
+  if (mbti.step === 'quiz') {
+    const q = QUESTIONS[mbti.idx], n = QUESTIONS.length;
+    root.innerHTML = `<div class="mb-prog"><i style="width:${mbti.idx / n * 100}%"></i></div><p class="mb-count">${mbti.idx + 1} / ${n}</p>
+      <h3 class="mb-q">더 나와 가까운 쪽을 골라 주세요</h3>
+      <button type="button" class="mb-opt" data-pick="a">${esc(q[1])}</button><button type="button" class="mb-opt" data-pick="b">${esc(q[2])}</button>
+      <div class="pm-actions">${mbti.idx ? '<button class="ghost" type="button" id="mb-back">← 이전 문항</button>' : ''}</div>`;
+    root.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => {
+      mbti.answers[mbti.idx] = b.dataset.pick;
+      if (mbti.idx + 1 >= n) finish(scoreAnswers(mbti.answers)); else { mbti.idx++; renderMbti(ctx); }
+    }));
+    $('#mb-back')?.addEventListener('click', () => { mbti.idx--; renderMbti(ctx); });
+    syncSave(); return null;
+  }
+  if (mbti.step === 'direct') {
+    root.innerHTML = `<div class="astro-card"><p>이미 알고 있는 유형을 골라 주세요.</p></div><form id="mb-dir" class="pm-form">${MB_AXES.map((a, i) => `<fieldset class="seg"><legend class="sr">${a.aName}·${a.bName}</legend>
+      <label><input type="radio" name="d${i}" value="${a.a}" checked><span>${a.a} · ${a.aName}</span></label><label><input type="radio" name="d${i}" value="${a.b}"><span>${a.b} · ${a.bName}</span></label></fieldset>`).join('')}
+      <button class="primary big" type="submit">결과 보기</button><button class="ghost" type="button" id="mb-cancel">취소</button></form>`;
+    $('#mb-dir').addEventListener('submit', (e) => { e.preventDefault(); const f = e.target; finish(axesFromCode(MB_AXES.map((_, i) => f.elements['d' + i].value).join(''))); });
+    $('#mb-cancel').addEventListener('click', () => { mbti.step = 'start'; renderMbti(ctx); });
+    syncSave(); return null;
+  }
+  root.innerHTML = `<div class="astro-card"><p>스무 문항으로 나의 성향 유형을 알아보는 간이 검사입니다. 정답은 없으니 평소의 나에게 더 가까운 쪽을 고르세요. (약 2분)</p></div>
+    <div class="mb-start"><button class="primary big" type="button" id="mb-go">📝 간이 검사 시작</button><button class="ghost" type="button" id="mb-know">이미 내 유형을 알아요</button></div>
+    <p class="chart-hint" style="text-align:center">공식 MBTI® 검사가 아닌, 이 앱에서 새로 만든 비공식 오락용 검사입니다. 답은 저장하지 않습니다.</p>`;
+  $('#mb-go').addEventListener('click', () => { mbti.step = 'quiz'; mbti.idx = 0; mbti.answers = []; renderMbti(ctx); });
+  $('#mb-know').addEventListener('click', () => { mbti.step = 'direct'; renderMbti(ctx); });
+  syncSave(); return null;
+}
+
+const TABS = ['today', 'year', 'zodiac', 'bio', 'match', 'animal', 'tarot', 'mbti'];
+const SAVE_LABEL = { today: '💾 오늘 카드 저장', match: '💾 궁합 카드 저장', animal: '💾 동물상 카드 저장', tarot: '💾 타로 카드 저장', mbti: '💾 성향 카드 저장' };
 /** @param ctx { saju, face, partner, onPartner, onPartnerReset } */
 export function renderExtra(ctx, { tab = 'today', offset = 0, month = null } = {}) {
   $('#extra-tabs').querySelectorAll('button').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); if (on) b.scrollIntoView?.({ inline: 'center', block: 'nearest' }); });
   for (const t of TABS) $('#extra-' + t).classList.toggle('hidden', t !== tab);
   const save = $('#extra-save');
-  const canSave = tab === 'today' || (tab === 'match' && ctx.partner) || (tab === 'animal' && ctx.face);
+  const canSave = tab === 'today' || (tab === 'match' && ctx.partner) || (tab === 'animal' && ctx.face) || (tab === 'tarot' && tarotDone()) || (tab === 'mbti' && mbti.result);
   save.classList.toggle('hidden', !canSave); if (SAVE_LABEL[tab]) save.textContent = SAVE_LABEL[tab];
   if (tab === 'today') return renderToday(ctx.saju, offset);
   if (tab === 'year') return renderYear(ctx.saju, month);
   if (tab === 'zodiac') return renderZodiac(ctx.saju);
   if (tab === 'bio') return renderBio(ctx.saju);
   if (tab === 'match') return renderMatch(ctx);
+  if (tab === 'tarot') return renderTarot(ctx);
+  if (tab === 'mbti') return renderMbti(ctx);
   return renderAnimal(ctx.face);
 }
 
@@ -343,5 +469,22 @@ export async function drawAnimalCard(face) {
     title: '나의 동물상', sub: A.kw, big: A.emoji, bigFont: 170, bigSub: `${A.name} · 닮은 정도 ${r.similar}%`, para: A.desc,
     bars: r.weights.slice(0, 3).map(w => ({ label: `${w.animal.emoji} ${w.animal.name}`, text: `${w.pct}%`, frac: Math.min(1, w.pct * 2.2 / 100) })),
     extra: r.reasons.length ? `특징: ${r.reasons.join(' · ')}` : '',
+  });
+}
+
+export async function drawTarotCard() {
+  const r = tarot.reading, sp = SPREADS[tarot.spread];
+  return drawCard({
+    title: '오늘의 타로', sub: `${sp.name}${tarot.question.trim() ? ' · ' + tarot.question.trim() : ''}`, big: r.cards.map(c => c.card.sym).join('  '), bigFont: r.cards.length > 3 ? 100 : 140,
+    bigSub: r.cards.length === 1 ? `${r.cards[0].card.name} · ${r.cards[0].orient}` : r.cards.map(c => c.card.name).join(' · '),
+    para: r.summary.join(' '), bars: r.cards.map(c => ({ label: `${c.pos} · ${c.card.name} (${c.orient})`, text: tarot.spread === 'five' ? String(c.score) : '', frac: c.score / 100 })),
+  });
+}
+export async function drawMbtiCard(ctx) {
+  const R = mbti.result, T = TYPES[R.code];
+  return drawCard({
+    title: '나의 성향 유형', sub: T.kw.join(' · '), big: R.code, bigFont: 150, bigSub: T.nick, para: T.desc,
+    bars: R.axes.map(a => ({ label: `${a.a} ${a.aName} ↔ ${a.bName} ${a.b}`, text: `${a.pick} ${Math.max(a.pa, a.pb)}%`, frac: Math.max(a.pa, a.pb) / 100 })),
+    extra: ctx?.saju ? crossReading(R.code, ctx.saju).slice(0, 60) + '…' : '',
   });
 }

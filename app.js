@@ -141,7 +141,7 @@ embers.set(true);
 window.addEventListener('popstate', (e) => {
   let v = e.state?.view || 'hub';
   if (v === 'analyzing' || (v === 'result' && !lastResult)) v = 'hub';
-  if ((v === 'palm' && !combo.palm) || (v === 'saju' && !combo.saju) || (v === 'combo' && !combo.fused) || (v === 'extra' && !combo.saju && !combo.face)) v = 'hub';
+  if ((v === 'palm' && !combo.palm) || (v === 'saju' && !combo.saju) || (v === 'combo' && !combo.fused) || (v === 'extra' && !combo.saju && !combo.face && !NO_REQ.includes(extra.tab))) v = 'hub';
   if (current === 'camera' && v !== 'camera') stopCamera();
   if (v === 'hub') renderHub();
   show(v, { history: 'none' });
@@ -1205,7 +1205,7 @@ function renderHub() {
   $('#hub-pips').setAttribute('aria-label', `완료한 단계 ${n}/3`);
   if (fresh && current === 'hub') bloom();
   $('#hub-go').disabled = n < 2;
-  $$('.xtile').forEach(b => b.classList.toggle('off', b.dataset.extra === 'animal' ? !combo.face : !combo.saju));
+  $$('.xtile').forEach(b => b.classList.toggle('off', b.dataset.extra === 'animal' ? !combo.face : NO_REQ.includes(b.dataset.extra) ? false : !combo.saju));
   $('#hub-extra-hint').textContent = combo.saju ? `내 사주(${combo.saju.reading.dayMaster.ko}${combo.saju.reading.dayMaster.elName.ko} 일간) 기준으로 풀이합니다.` : '생년월일을 입력하면 풀이해 드립니다. 눌러서 바로 입력하세요.';
   $('#hub-hint').textContent = n < 2 ? `두 가지 이상 완료하면 종합 결과를 볼 수 있습니다. (${n}/3 완료)`
     : n === 2 ? '한 가지를 더 하면 더 정확해지지만, 지금도 종합 결과를 볼 수 있습니다.' : '세 가지를 모두 완료했습니다!';
@@ -1217,6 +1217,7 @@ function openCombo() {
   show('combo');
 }
 /** 오늘의 운세 · 올해·월별·띠 · 별자리 화면 열기. 생년월일이 없으면 사주 입력을 먼저 받는다. */
+const NO_REQ = ['animal', 'tarot', 'mbti'];   // 생년월일 없이도 열리는 탭
 function extraCtx() {
   return { saju: combo.saju, face: combo.face, partner,
     onPartner: (p) => { partner = p; X.renderExtra(extraCtx(), extra); },
@@ -1225,7 +1226,7 @@ function extraCtx() {
 function openExtra(tab, { replace = false } = {}) {
   if (tab === 'animal') {   // 동물상은 관상 촬영 결과(측정값)로 본다
     if (!combo.face) { afterFace = tab; showToast('동물상은 얼굴로 봅니다. 얼굴을 먼저 촬영해 주세요.', 3600); startCapture('face'); return; }
-  } else if (!combo.saju) { afterSaju = tab; showToast('생년월일을 먼저 입력해 주세요.'); show('sajuform'); return; }
+  } else if (!NO_REQ.includes(tab) && !combo.saju) { afterSaju = tab; showToast('생년월일을 먼저 입력해 주세요.'); show('sajuform'); return; }
   if (tab !== extra.tab) { extra.offset = 0; extra.month = null; }
   extra.tab = tab;
   X.renderExtra(extraCtx(), extra);
@@ -1336,7 +1337,7 @@ $('#view-extra').addEventListener('click', (e) => {
   if (cap) { afterFace = 'animal'; startCapture('face'); return; }
   if (tab) {
     const t = tab.dataset.tab;
-    if (t !== 'animal' && !combo.saju) { afterSaju = t; showToast('생년월일을 먼저 입력해 주세요.'); show('sajuform'); return; }
+    if (!NO_REQ.includes(t) && !combo.saju) { afterSaju = t; showToast('생년월일을 먼저 입력해 주세요.'); show('sajuform'); return; }
     extra.tab = t; if (t !== 'today') extra.offset = 0;
   }
   if (d) extra.offset = +d.dataset.d;
@@ -1346,8 +1347,8 @@ $('#view-extra').addEventListener('click', (e) => {
 $('#extra-save').addEventListener('click', async () => {
   const btn = $('#extra-save'); btn.disabled = true;
   try {
-    const kind = extra.tab === 'match' ? ['궁합', '우리의 궁합'] : extra.tab === 'animal' ? ['동물상', '나의 동물상'] : ['오늘의운세', '오늘의 운세'];
-    const canvas = extra.tab === 'match' ? await X.drawMatchCard(extraCtx()) : extra.tab === 'animal' ? await X.drawAnimalCard(combo.face) : await X.drawTodayCard(combo.saju, extra.offset);
+    const kind = { match: ['궁합', '우리의 궁합'], animal: ['동물상', '나의 동물상'], tarot: ['타로', '오늘의 타로'], mbti: ['성향', '나의 성향 유형'] }[extra.tab] || ['오늘의운세', '오늘의 운세'];
+    const canvas = extra.tab === 'match' ? await X.drawMatchCard(extraCtx()) : extra.tab === 'animal' ? await X.drawAnimalCard(combo.face) : extra.tab === 'tarot' ? await X.drawTarotCard() : extra.tab === 'mbti' ? await X.drawMbtiCard(extraCtx()) : await X.drawTodayCard(combo.saju, extra.offset);
     const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9));
     if (!blob) throw new Error('카드 이미지를 만들지 못했습니다.');
     const file = new File([blob], `${kind[0]}_${new Date().toISOString().slice(0, 10)}.jpg`, { type: 'image/jpeg' });
