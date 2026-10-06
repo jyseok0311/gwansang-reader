@@ -12,9 +12,10 @@ PC와 휴대폰(안드로이드·아이폰) 모두에서 동작하며, 사진과
 
 ## 바로 사용하기
 
-**https://jyseok0311.github.io/gwansang-reader/**
+- **GitHub Pages**: https://jyseok0311.github.io/gwansang-reader/
+- **Vercel**: https://gwansang-reader.vercel.app
 
-설치 없이 PC나 휴대폰 브라우저에서 위 주소를 열면 됩니다. 정식 HTTPS 주소라서 휴대폰에서도 인증서 경고 없이 카메라를 쓸 수 있습니다.
+설치 없이 PC나 휴대폰 브라우저에서 위 주소 중 아무 곳이나 열면 됩니다. 둘 다 같은 저장소(`main`)에서 자동으로 배포되는 정식 HTTPS 주소라서 휴대폰에서도 인증서 경고 없이 카메라를 쓸 수 있습니다. (Vercel은 프로젝트 주소 `gwansang-reader.vercel.app`만 로그인 없이 열리고, 같이 생기는 `...-ai-maestro.vercel.app` 형태의 주소는 Vercel 로그인이 필요합니다.)
 
 ## 내 PC에서 실행
 
