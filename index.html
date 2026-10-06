@@ -84,11 +84,14 @@
       </div>
 
       <section class="hub-extra" aria-label="오늘의 운세·별자리·띠">
-        <h3 class="hub-extra-title">오늘의 운세 · 올해 · 별자리</h3>
+        <h3 class="hub-extra-title">오늘의 운세 · 별자리 · 궁합 · 동물상</h3>
         <div class="xtiles">
           <button class="xtile" type="button" data-extra="today"><b aria-hidden="true">今</b><span>오늘의 운세</span></button>
           <button class="xtile" type="button" data-extra="year"><b aria-hidden="true">歲</b><span>올해·월별·띠</span></button>
           <button class="xtile" type="button" data-extra="zodiac"><b aria-hidden="true">星</b><span>별자리</span></button>
+          <button class="xtile" type="button" data-extra="match"><b aria-hidden="true">合</b><span>궁합</span></button>
+          <button class="xtile" type="button" data-extra="animal"><b aria-hidden="true">獸</b><span>동물상</span></button>
+          <button class="xtile" type="button" data-extra="bio"><b aria-hidden="true">律</b><span>바이오리듬</span></button>
         </div>
         <p id="hub-extra-hint" class="hub-extra-hint"></p>
       </section>
@@ -379,16 +382,22 @@
 
     <!-- 오늘·올해·별자리 -->
     <section id="view-extra" class="panel hidden result extra">
-      <h2 class="hub-title">시간의 운세 <small>今 · 歲 · 星</small></h2>
-      <div id="extra-tabs" class="palm-tabs" role="tablist" aria-label="운세 종류">
+      <h2 class="hub-title">더 보는 운세 <small>今 · 歲 · 星 · 合</small></h2>
+      <div id="extra-tabs" class="palm-tabs extra-tabs" role="tablist" aria-label="운세 종류">
         <button type="button" role="tab" data-tab="today">오늘</button>
         <button type="button" role="tab" data-tab="year">올해·월별·띠</button>
         <button type="button" role="tab" data-tab="zodiac">별자리</button>
+        <button type="button" role="tab" data-tab="bio">바이오리듬</button>
+        <button type="button" role="tab" data-tab="match">궁합</button>
+        <button type="button" role="tab" data-tab="animal">동물상</button>
       </div>
       <div id="extra-today" class="extra-pane"></div>
       <div id="extra-year" class="extra-pane hidden"></div>
       <div id="extra-zodiac" class="extra-pane hidden"></div>
-      <p class="disclaimer">※ 사주의 일간과 오늘·올해·이달의 간지가 만나는 관계(십성·12운성·합충)와 별자리를 오락용으로 풀이한 결과입니다. 같은 날에는 같은 결과가 나오며 과학적 근거가 없습니다.</p>
+      <div id="extra-bio" class="extra-pane hidden"></div>
+      <div id="extra-match" class="extra-pane hidden"></div>
+      <div id="extra-animal" class="extra-pane hidden"></div>
+      <p class="disclaimer">※ 사주·별자리·얼굴 측정값을 오락용으로 풀이한 결과입니다. 바이오리듬·동물상·궁합 모두 과학적 근거가 없으며, 입력한 생년월일과 얼굴 사진은 기기 안에서만 처리됩니다.</p>
       <div class="result-bar">
         <button class="primary" type="button" data-goto="hub">🏠 처음으로</button>
         <button class="ghost" type="button" id="extra-save">💾 오늘 카드 저장</button>

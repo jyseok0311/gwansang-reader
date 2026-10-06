@@ -181,6 +181,27 @@ export function drawMonthly(ctx, w, h, k, { values, current, selected, min = 50,
   label(ctx, '월', w - padX * 0.2, h - padB + fs * 1.4, { size: fs * 0.85, color: MUTED, align: 'right' });
 }
 
+// ── 2-3. 바이오리듬 (세 주기를 한 그래프에) ──────────────────
+/** @param series [{ off, date, values:{key:%} }] off=0 이 오늘 */
+export function drawBio(ctx, w, h, k, { series, cycles }) {
+  const n = series.length, fs = clamp(w / 30, 10, 13), padT = fs * 1.2, padB = fs * 2.6, padX = w * 0.05;
+  const gx = (i) => padX + (w - padX * 2) * i / (n - 1), gy = (v) => padT + (1 - (v + 100) / 200) * (h - padT - padB);
+  ctx.setLineDash([3, 5]); ctx.lineWidth = 1; ctx.strokeStyle = GRID;
+  for (const v of [-50, 50]) { ctx.beginPath(); ctx.moveTo(padX, gy(v)); ctx.lineTo(w - padX, gy(v)); ctx.stroke(); }
+  ctx.setLineDash([]); ctx.strokeStyle = 'rgba(244,241,234,.3)'; ctx.beginPath(); ctx.moveTo(padX, gy(0)); ctx.lineTo(w - padX, gy(0)); ctx.stroke();
+  label(ctx, '0', padX - 3, gy(0), { size: fs * 0.85, color: MUTED, align: 'right' });
+  const ti = series.findIndex(s => s.off === 0);
+  ctx.setLineDash([5, 5]); ctx.strokeStyle = rgba(SRC_COLOR.all, 0.8); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(gx(ti), padT); ctx.lineTo(gx(ti), h - padB); ctx.stroke(); ctx.setLineDash([]);
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, w * k, h); ctx.clip();
+  for (const c of cycles) {
+    ctx.beginPath(); series.forEach((s, i) => { const x = gx(i), y = gy(s.values[c.key]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.lineWidth = 2.4; ctx.strokeStyle = c.color; ctx.lineJoin = 'round'; ctx.shadowColor = rgba(c.color, 0.6); ctx.shadowBlur = 8; ctx.stroke();
+  }
+  ctx.restore();
+  for (const c of cycles) { const v = series[ti].values[c.key]; ctx.beginPath(); ctx.arc(gx(ti), gy(v), 5, 0, TAU); ctx.fillStyle = c.color; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke(); }
+  series.forEach((s, i) => { if (s.off % 5 === 0) label(ctx, s.off === 0 ? '오늘' : `${s.date.getMonth() + 1}/${s.date.getDate()}`, gx(i), h - padB + fs * 1.4, { size: fs * 0.9, color: s.off === 0 ? '#ffd08a' : MUTED, weight: s.off === 0 ? 700 : 500 }); });
+}
+
 // ── 3. 오행 구성도 (상생·상극과 세 방면의 자리) ───────────────
 const EL_ORDER = ['wood', 'fire', 'earth', 'metal', 'water'];     // 시계 방향으로 상생
 const SRC_GLYPH = { face: '相', palm: '手', saju: '命' };

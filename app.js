@@ -69,6 +69,8 @@ const engine = { mod: null, vision: null, source: null, delegate: null, landmark
 // palm: 가장 최근에 본 손, palms: 왼손·오른손 각각 (둘 다 있으면 비교해 보여 주고 종합에는 평균을 쓴다)
 const combo = { face: null, palm: null, palms: { left: null, right: null }, saju: null, fused: null };
 let afterSaju = null;       // 생년월일이 없어 사주 입력으로 보낸 경우, 입력이 끝나면 열 운세 탭
+let afterFace = null;       // 얼굴이 없어 촬영으로 보낸 경우, 분석이 끝나면 열 탭(동물상)
+let partner = null;         // 궁합 상대 { name, state } — 저장하지 않고 이 화면에서만 쓴다
 const extra = { tab: 'today', offset: 0, month: null };   // 오늘·올해·별자리 화면의 상태
 let captureKind = 'face';   // 지금 카메라로 찍는 것: 'face' | 'palm'
 let handSide = 'right';     // 손금 촬영 때 안내선에 그릴 손: 'right' | 'left' (고른 값은 기억한다)
@@ -126,7 +128,8 @@ function show(name, { history: mode = 'push' } = {}) {
   document.body.classList.toggle('cam-open', name === 'camera');
   embers.set(name === 'hub' || name === 'combo');
   if (name === 'camera') syncViewport();
-  if (name !== 'sajuform') afterSaju = null;   // 사주 입력을 취소하고 다른 화면으로 가면 '입력 뒤 열기' 예약을 지운다
+  if (name !== 'sajuform') afterSaju = null;
+  if (!['camera', 'analyzing', 'extra', 'result'].includes(name)) afterFace = null;   // 사주 입력을 취소하고 다른 화면으로 가면 '입력 뒤 열기' 예약을 지운다
   if (mode === 'push' && prev !== name) history.pushState({ view: name }, '');
   else if (mode === 'replace') history.replaceState({ view: name }, '');
   window.scrollTo({ top: 0, behavior: BAR_VIEWS.has(name) ? 'auto' : 'smooth' });
@@ -138,7 +141,7 @@ embers.set(true);
 window.addEventListener('popstate', (e) => {
   let v = e.state?.view || 'hub';
   if (v === 'analyzing' || (v === 'result' && !lastResult)) v = 'hub';
-  if ((v === 'palm' && !combo.palm) || (v === 'saju' && !combo.saju) || (v === 'combo' && !combo.fused) || (v === 'extra' && !combo.saju)) v = 'hub';
+  if ((v === 'palm' && !combo.palm) || (v === 'saju' && !combo.saju) || (v === 'combo' && !combo.fused) || (v === 'extra' && !combo.saju && !combo.face)) v = 'hub';
   if (current === 'camera' && v !== 'camera') stopCamera();
   if (v === 'hub') renderHub();
   show(v, { history: 'none' });
@@ -786,6 +789,7 @@ async function analyzeSnapshot({ liveFeatures = [], history: histMode = 'push', 
     if (current !== 'analyzing') { refreshFusion(); renderHub(); renderResult(result); return; }   // 분석 중 사용자가 뒤로 감
     renderResult(result);
     refreshFusion();
+    if (afterFace) { const t = afterFace; afterFace = null; openExtra(t, { replace: true }); animateMeters(); return; }
     backToHub();
     showToast('관상 분석이 끝났습니다. 「결과 보기」로 확인하세요.', 3600);
     animateMeters();
@@ -1201,7 +1205,7 @@ function renderHub() {
   $('#hub-pips').setAttribute('aria-label', `완료한 단계 ${n}/3`);
   if (fresh && current === 'hub') bloom();
   $('#hub-go').disabled = n < 2;
-  $$('.xtile').forEach(b => b.classList.toggle('off', !combo.saju));
+  $$('.xtile').forEach(b => b.classList.toggle('off', b.dataset.extra === 'animal' ? !combo.face : !combo.saju));
   $('#hub-extra-hint').textContent = combo.saju ? `내 사주(${combo.saju.reading.dayMaster.ko}${combo.saju.reading.dayMaster.elName.ko} 일간) 기준으로 풀이합니다.` : '생년월일을 입력하면 풀이해 드립니다. 눌러서 바로 입력하세요.';
   $('#hub-hint').textContent = n < 2 ? `두 가지 이상 완료하면 종합 결과를 볼 수 있습니다. (${n}/3 완료)`
     : n === 2 ? '한 가지를 더 하면 더 정확해지지만, 지금도 종합 결과를 볼 수 있습니다.' : '세 가지를 모두 완료했습니다!';
@@ -1213,11 +1217,18 @@ function openCombo() {
   show('combo');
 }
 /** 오늘의 운세 · 올해·월별·띠 · 별자리 화면 열기. 생년월일이 없으면 사주 입력을 먼저 받는다. */
+function extraCtx() {
+  return { saju: combo.saju, face: combo.face, partner,
+    onPartner: (p) => { partner = p; X.renderExtra(extraCtx(), extra); },
+    onPartnerReset: () => { partner = null; X.renderExtra(extraCtx(), extra); } };
+}
 function openExtra(tab, { replace = false } = {}) {
-  if (!combo.saju) { afterSaju = tab; showToast('생년월일을 먼저 입력해 주세요.'); show('sajuform'); return; }
+  if (tab === 'animal') {   // 동물상은 관상 촬영 결과(측정값)로 본다
+    if (!combo.face) { afterFace = tab; showToast('동물상은 얼굴로 봅니다. 얼굴을 먼저 촬영해 주세요.', 3600); startCapture('face'); return; }
+  } else if (!combo.saju) { afterSaju = tab; showToast('생년월일을 먼저 입력해 주세요.'); show('sajuform'); return; }
   if (tab !== extra.tab) { extra.offset = 0; extra.month = null; }
   extra.tab = tab;
-  X.renderExtra(combo.saju, extra);
+  X.renderExtra(extraCtx(), extra);
   show('extra', { history: replace ? 'replace' : 'push' });
 }
 function goto(name) {
@@ -1319,27 +1330,32 @@ $('#hub-palm-view').addEventListener('click', () => show('palm'));
 $('#hub-go').addEventListener('click', openCombo);
 document.querySelectorAll('.xtile').forEach(b => b.addEventListener('click', () => openExtra(b.dataset.extra)));
 $('#view-extra').addEventListener('click', (e) => {
-  const tab = e.target.closest('[data-tab]'), d = e.target.closest('[data-d]'), mo = e.target.closest('[data-month]');
-  if (!tab && !d && !mo) return;
+  const tab = e.target.closest('[data-tab]'), d = e.target.closest('[data-d]'), mo = e.target.closest('[data-month]'), cap = e.target.closest('[data-capture]');
+  if (!tab && !d && !mo && !cap) return;
   e.preventDefault();
-  if (tab) { extra.tab = tab.dataset.tab; if (extra.tab !== 'today') extra.offset = 0; }
+  if (cap) { afterFace = 'animal'; startCapture('face'); return; }
+  if (tab) {
+    const t = tab.dataset.tab;
+    if (t !== 'animal' && !combo.saju) { afterSaju = t; showToast('생년월일을 먼저 입력해 주세요.'); show('sajuform'); return; }
+    extra.tab = t; if (t !== 'today') extra.offset = 0;
+  }
   if (d) extra.offset = +d.dataset.d;
   if (mo) extra.month = +mo.dataset.month;
-  X.renderExtra(combo.saju, extra);
+  X.renderExtra(extraCtx(), extra);
 });
 $('#extra-save').addEventListener('click', async () => {
-  if (!combo.saju) return;
   const btn = $('#extra-save'); btn.disabled = true;
   try {
-    const canvas = await X.drawTodayCard(combo.saju, extra.offset);
+    const kind = extra.tab === 'match' ? ['궁합', '우리의 궁합'] : extra.tab === 'animal' ? ['동물상', '나의 동물상'] : ['오늘의운세', '오늘의 운세'];
+    const canvas = extra.tab === 'match' ? await X.drawMatchCard(extraCtx()) : extra.tab === 'animal' ? await X.drawAnimalCard(combo.face) : await X.drawTodayCard(combo.saju, extra.offset);
     const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9));
     if (!blob) throw new Error('카드 이미지를 만들지 못했습니다.');
-    const file = new File([blob], `오늘의운세_${new Date().toISOString().slice(0, 10)}.jpg`, { type: 'image/jpeg' });
-    await shareOrDownload(file, { title: '오늘의 운세', text: '운명 판독기로 본 오늘의 운세' });
+    const file = new File([blob], `${kind[0]}_${new Date().toISOString().slice(0, 10)}.jpg`, { type: 'image/jpeg' });
+    await shareOrDownload(file, { title: kind[1], text: `운명 판독기로 본 ${kind[1]}` });
   } catch (err) { console.error(err); showToast('운세 카드를 만들지 못했습니다.'); }
   finally { btn.disabled = false; }
 });
-$('#hub-reset').addEventListener('click', () => { combo.face = combo.palm = combo.saju = combo.fused = null; combo.palms = { left: null, right: null }; lastResult = null; cardPromise = null; renderHub(); syncBackLinks(); showToast('처음부터 다시 시작합니다.'); });
+$('#hub-reset').addEventListener('click', () => { combo.face = combo.palm = combo.saju = combo.fused = null; partner = null; combo.palms = { left: null, right: null }; lastResult = null; cardPromise = null; renderHub(); syncBackLinks(); showToast('처음부터 다시 시작합니다.'); });
 $('#palm-tabs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-side]'); const p = b && combo.palms[b.dataset.side];
   if (!p) return;

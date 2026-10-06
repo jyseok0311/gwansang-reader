@@ -600,3 +600,28 @@ canvas.chart.monthly { aspect-ratio: 16 / 10; }
 .month-grid .sel { outline: 2px solid var(--gold-2); outline-offset: 1px; }
 .month-detail { margin-bottom: 4px; }
 .month-detail p:first-child { margin-top: 0; }
+
+/* 2단계: 궁합 · 동물상 · 바이오리듬 */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.extra-tabs { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; -webkit-overflow-scrolling: touch; margin-left: calc(var(--gutter, 16px) * -1); margin-right: calc(var(--gutter, 16px) * -1); padding: 0 var(--gutter, 16px); }
+.extra-tabs::-webkit-scrollbar { display: none; }
+.extra-tabs button { flex: 0 0 auto; padding: 8px 16px; }
+.f-sub { margin-left: 6px; color: var(--dim); font-size: .74rem; }
+canvas.chart.bio { aspect-ratio: 16 / 10; }
+.bio-list { display: grid; gap: 10px; }
+.bio-row { background: var(--card); border: 1px solid var(--card-b); border-radius: 14px; padding: 12px 14px; }
+.bio-head { display: flex; align-items: baseline; gap: 8px; }
+.bio-head small { color: var(--dim); font-size: .76rem; }
+.bio-val { margin-left: auto; font-family: var(--serif); font-size: 1.1rem; color: var(--ink); }
+.bio-head em { font-style: normal; font-size: .74rem; color: var(--gold-2); border: 1px solid rgba(255,178,77,.4); border-radius: 999px; padding: 0 8px; }
+.bio-track { position: relative; height: 8px; margin: 10px 4px; border-radius: 4px; background: linear-gradient(90deg, rgba(255,106,106,.25), rgba(244,241,234,.08) 50%, rgba(111,211,154,.25)); }
+.bio-track i { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px currentColor; border: 2px solid #fff; }
+.bio-row p { margin: 0; font-size: .86rem; color: var(--muted); line-height: 1.55; }
+.bio-next { display: grid; gap: 8px; }
+.bio-next div { display: flex; flex-wrap: wrap; gap: 4px 14px; background: var(--card); border: 1px solid var(--card-b); border-radius: 12px; padding: 10px 14px; font-size: .84rem; color: var(--body); }
+.bio-next b { min-width: 3em; }
+.animal-photo { display: block; width: 96px; height: 96px; margin: 0 auto 10px; border-radius: 50%; border: 2px solid rgba(255,255,255,.7); box-shadow: 0 0 30px rgba(138,107,255,.5); object-fit: cover; background: #111; }
+.pm-form { display: grid; gap: 14px; margin-top: 14px; }
+.pm-field { display: grid; gap: 6px; font-size: .88rem; color: var(--muted); }
+.pm-field input { min-height: 48px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--card-b); background: var(--card); color: var(--ink); font: inherit; }
+.pm-actions { text-align: center; margin: 18px 0 4px; }
