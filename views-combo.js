@@ -6,7 +6,7 @@ import { FORTUNE_KEYS, FORTUNE_NAMES } from './fusion.js';
 import { wrapLines, roundRect, $, clamp, esc } from './util.js';
 import { compareHands } from './palm-reading.js';
 import { josa } from './physiognomy.js';
-import { SRC_COLOR, mountChart, createOrrery, drawRadar, drawFlow, drawElementMap, renderRadarImage } from './charts.js';
+import { SRC_COLOR, mountChart, createOrrery, drawRadar, drawFlow, drawElementMap, renderRadarImage, drawWheel, drawDonut, drawColumns } from './charts.js';
 
 const ICON = { wealth: '🪙', love: '💞', career: '🏛️', health: '🌿', social: '🤝' };
 const LEVEL = (n) => (n >= 88 ? '大吉' : n >= 78 ? '吉' : n >= 68 ? '中吉' : '平');
@@ -26,6 +26,11 @@ export function renderFaceCharts(r) {
   const radar = $('#face-radar');
   radar.setAttribute('aria-label', aria('관상으로 본 인생 영역별 점수', AXES.map(a => a.label), v));
   mountChart(radar, (ctx, w, h, k) => drawRadar(ctx, w, h, k, { axes: AXES, series: [{ color: SRC_COLOR.face, values: v, glow: true }] }));
+  // 열두 궁 휠: 상·중·하 등급을 색과 길이로
+  const GR = { 上: ['#ffb24d', 1], 中: ['#6fd39a', 0.68], 下: ['#8a8f9e', 0.42] };
+  const wheel = $('#face-wheel');
+  wheel.setAttribute('aria-label', '열두 궁 등급: ' + r.palaces.map(p => `${p.name.replace(/\(.+\)/, '')} ${p.grade}`).join(', '));
+  mountChart(wheel, (ctx, w, h, k) => drawWheel(ctx, w, h, k, { segs: r.palaces.map(p => ({ label: p.name.replace(/\(.+\)/, ''), color: GR[p.grade][0], fill: GR[p.grade][1] })), center: '十二宮', centerSub: '열두 궁' }));
   const st = r.samjeong.stages;
   const flow = $('#face-flow');
   flow.setAttribute('aria-label', '인생의 흐름: ' + st.map(x => `${x.period.split(' · ')[0]} ${x.idx}`).join(', '));
@@ -35,12 +40,17 @@ export function renderFaceCharts(r) {
 }
 
 /** 손금 결과: 네 선의 세기 레이더 + 다섯 운 레이더 */
-function renderPalmCharts(r) {
+function renderPalmCharts(r, hand) {
   const lineAxes = [{ label: '감정선' }, { label: '두뇌선' }, { label: '생명선' }, { label: '운명선' }];
   const lv = ['heart', 'head', 'life', 'fate'].map(k => r.lineScores[k] ?? 40);
   const lr = $('#palm-line-radar');
   lr.setAttribute('aria-label', aria('손금 네 선의 뚜렷함과 길이', lineAxes.map(a => a.label), lv));
   mountChart(lr, (ctx, w, h, k) => drawRadar(ctx, w, h, k, { axes: lineAxes, series: [{ color: SRC_COLOR.palm, values: lv, glow: true }] }));
+  if (hand && hand.fingerLen) {   // 손가락 길이 막대 (손바닥 길이 = 1)
+    const FL = hand.fingerLen, fl = [['검지', FL.index], ['중지', FL.middle], ['약지', FL.ring], ['새끼', FL.pinky]], fc = $('#palm-fingers');
+    fc.setAttribute('aria-label', '손가락 길이: ' + fl.map(([n, x]) => `${n} ${x.toFixed(2)}`).join(', '));
+    mountChart(fc, (ctx, w, h, k) => drawColumns(ctx, w, h, k, { labels: fl.map(x => x[0]), min: 0, max: 1.3, fmt: (x) => x.toFixed(2), series: [{ color: SRC_COLOR.palm, values: fl.map(x => x[1]) }] }));
+  }
   const v = vals(r.fortunes), fr = $('#palm-radar');
   fr.setAttribute('aria-label', aria('손금으로 본 인생 영역별 점수', AXES.map(a => a.label), v));
   mountChart(fr, (ctx, w, h, k) => drawRadar(ctx, w, h, k, { axes: AXES, series: [{ color: SRC_COLOR.palm, values: v, glow: true }] }));
@@ -51,6 +61,13 @@ function renderSajuCharts(r) {
   const em = $('#saju-elmap');
   em.setAttribute('aria-label', '오행 분포: ' + Object.entries(r.counts).map(([k, n]) => `${ELEMENTS[k].name} ${n}글자`).join(', '));
   mountChart(em, (ctx, w, h, k) => drawElementMap(ctx, w, h, k, { markers: [{ src: 'saju', el: r.dayMaster.el }], counts: r.counts }));
+  const GODN = { same: '비겁', genMe: '인성', iGen: '식상', iCtrl: '재성', ctrlMe: '관성' }, gk = Object.keys(GODN);
+  const gc = $('#saju-godcols'); gc.setAttribute('aria-label', '십성 분포: ' + gk.map(k => `${GODN[k]} ${r.gods[k]}`).join(', '));
+  mountChart(gc, (ctx, w, h, k) => drawColumns(ctx, w, h, k, { labels: gk.map(x => GODN[x]), min: 0, max: Math.max(4, ...gk.map(x => r.gods[x])) + 1, highlight: gk.indexOf(r.topGod.key), series: [{ color: SRC_COLOR.saju, values: gk.map(x => r.gods[x]) }] }));
+  const EO = ['wood', 'fire', 'earth', 'metal', 'water'], dn = $('#saju-donut');
+  dn.setAttribute('aria-label', '오행 비율: ' + EO.map(k => `${ELEMENTS[k].name} ${r.counts[k]}`).join(', '));
+  $('#saju-donut-legend').innerHTML = EO.map(k => `<span><i style="background:${ELEMENTS[k].color}"></i>${ELEMENTS[k].hanja} ${r.counts[k]}</span>`).join('');
+  mountChart(dn, (ctx, w, h, k) => drawDonut(ctx, w, h, k, { items: EO.map(e => ({ label: ELEMENTS[e].hanja, value: r.counts[e], color: ELEMENTS[e].color })), center: r.dayMaster.hanja, centerSub: '일간' }));
   const v = vals(r.fortunes), fr = $('#saju-radar');
   fr.setAttribute('aria-label', aria('사주로 본 인생 영역별 점수', AXES.map(a => a.label), v));
   mountChart(fr, (ctx, w, h, k) => drawRadar(ctx, w, h, k, { axes: AXES, series: [{ color: SRC_COLOR.saju, values: v, glow: true }] }));
@@ -222,7 +239,7 @@ export function renderPalm(palm, srcCanvas, palms = null) {
     return `<div class="fortune"><div class="f-head"><span class="f-icon" aria-hidden="true">${ICON[k]}</span><b>${FORTUNE_NAMES[k]}</b><span class="f-level ${sc >= 88 ? 'top' : ''}">${LEVEL(sc)}</span><span class="f-score">${sc}</span></div>
       <div class="meter gold"><i data-w="${sc}%" style="--w:0%"></i></div></div>`;
   }).join('');
-  renderPalmCharts(r);
+  renderPalmCharts(r, a.hand);
   animate('#view-palm');
 }
 
@@ -264,6 +281,9 @@ export function elementLabel(src, c) {
 }
 
 export function renderCombo(f, c) {
+  $('#dl-face').disabled = !c.face; $('#dl-palm').disabled = !c.palm; $('#dl-saju').disabled = !c.saju;
+  $('#combo-core').classList.toggle('hidden', !f);   // 관상·손금·사주 중 둘 이상이 없으면 핵심 합산 부분은 숨기고 통합 리포트만 보여 준다
+  if (!f) return;
   $('#combo-avg').textContent = f.avg;
   $('#combo-grade').textContent = f.grade;
   $('#combo-sources').innerHTML = ['face', 'palm', 'saju'].map(k => `<span class="${f.has[k] ? 'on' : ''}">${f.has[k] ? '✓ ' : ''}${SRC[k]}</span>`).join('');

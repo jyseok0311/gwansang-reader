@@ -290,3 +290,19 @@ export function aspectOf(moonLon, natalLon) {
   const hit = ASPECTS.find(a => Math.abs(d - a.deg) <= 8);
   return hit ? { ...hit, orb: +Math.abs(d - hit.deg).toFixed(1) } : { deg: null, name: '뚜렷한 각 없음', score: 76, text: '오늘 달은 큰 각 없이 흘러 평온한 하루입니다. 내 페이스를 지키세요.', orb: null };
 }
+
+// ── 하루 시간대(시진)별 흐름 ──────────────────────────────────
+export const HOUR_NAMES = ['자', '축', '인', '묘', '진', '사', '오', '미', '신', '유', '술', '해'];
+export const HOUR_RANGES = ['23~01', '01~03', '03~05', '05~07', '07~09', '09~11', '11~13', '13~15', '15~17', '17~19', '19~21', '21~23'];
+/** 오늘의 시주(時柱) 천간은 일간으로 정해진다. 열두 시진마다 나의 일간과의 관계를 같은 방식으로 점수 낸다. */
+export function hourlyFortune(state, date = new Date()) {
+  const s = computeSaju({ year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate(), calendar: 'solar', hour: 12, minute: 0 });
+  const dayStem = s.pillars.day.stem, me = meOf(state);
+  const hours = HOUR_NAMES.map((n, i) => {
+    const stem = ((dayStem % 5) * 2 + i) % 10, r = scoreTime(me, { stem, branch: i });
+    return { i, name: `${n}시`, range: HOUR_RANGES[i], avg: r.avg, god: r.godInfo.name, level: r.level };
+  });
+  const nowIdx = Math.floor(((date.getHours() + 1) % 24) / 2);
+  const sorted = [...hours].sort((a, b) => b.avg - a.avg);
+  return { hours, nowIdx, best: sorted[0], worst: sorted[sorted.length - 1], top3: sorted.slice(0, 3).sort((a, b) => a.i - b.i) };
+}

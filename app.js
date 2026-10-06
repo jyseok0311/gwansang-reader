@@ -12,6 +12,8 @@ import { interpretPalm } from './palm-reading.js';
 import { fuse } from './fusion.js';
 import * as V from './views-combo.js';
 import * as X from './views-extra.js';
+import { buildReport } from './report.js';
+import { renderReport } from './views-report.js';
 import { wrapLines, roundRect } from './util.js';
 import { createEmbers } from './embers.js';
 
@@ -141,7 +143,7 @@ embers.set(true);
 window.addEventListener('popstate', (e) => {
   let v = e.state?.view || 'hub';
   if (v === 'analyzing' || (v === 'result' && !lastResult)) v = 'hub';
-  if ((v === 'palm' && !combo.palm) || (v === 'saju' && !combo.saju) || (v === 'combo' && !combo.fused) || (v === 'extra' && !combo.saju && !combo.face && !NO_REQ.includes(extra.tab))) v = 'hub';
+  if ((v === 'palm' && !combo.palm) || (v === 'saju' && !combo.saju) || (v === 'combo' && !combo.fused && !combo.saju) || (v === 'extra' && !combo.saju && !combo.face && !NO_REQ.includes(extra.tab))) v = 'hub';
   if (current === 'camera' && v !== 'camera') stopCamera();
   if (v === 'hub') renderHub();
   show(v, { history: 'none' });
@@ -1204,16 +1206,23 @@ function renderHub() {
   $$('#hub-pips i').forEach((el, i) => el.classList.toggle('on', i < n));
   $('#hub-pips').setAttribute('aria-label', `완료한 단계 ${n}/3`);
   if (fresh && current === 'hub') bloom();
-  $('#hub-go').disabled = n < 2;
+  $('#hub-go').disabled = n < 2 && !combo.saju;
   $$('.xtile').forEach(b => b.classList.toggle('off', b.dataset.extra === 'animal' ? !combo.face : NO_REQ.includes(b.dataset.extra) ? false : !combo.saju));
   $('#hub-extra-hint').textContent = combo.saju ? `내 사주(${combo.saju.reading.dayMaster.ko}${combo.saju.reading.dayMaster.elName.ko} 일간) 기준으로 풀이합니다.` : '생년월일을 입력하면 풀이해 드립니다. 눌러서 바로 입력하세요.';
-  $('#hub-hint').textContent = n < 2 ? `두 가지 이상 완료하면 종합 결과를 볼 수 있습니다. (${n}/3 완료)`
+  $('#hub-hint').textContent = n < 2 && !combo.saju ? `두 가지 이상 완료하거나 생년월일을 입력하면 종합 리포트를 볼 수 있습니다. (${n}/3 완료)`
+    : n < 2 ? '생년월일만으로도 별자리·띠·오늘·올해·바이오리듬을 합친 종합 리포트를 볼 수 있어요. 관상·손금·타로·MBTI를 더하면 더 풍부해집니다.'
     : n === 2 ? '한 가지를 더 하면 더 정확해지지만, 지금도 종합 결과를 볼 수 있습니다.' : '세 가지를 모두 완료했습니다!';
+}
+/** 지금까지 한 모든 것(관상·손금·사주·동물상·MBTI·타로·궁합)과 사주 기반 시간 흐름을 합친 통합 리포트 */
+function currentReport() {
+  return buildReport({ saju: combo.saju, face: combo.face, palm: combo.palm, fused: combo.fused, partner, tarot: X.getTarot(), mbti: X.getMbti() });
 }
 function openCombo() {
   refreshFusion();
-  if (!combo.fused) return;
+  const rp = currentReport();
+  if (!rp) return;
   V.renderCombo(combo.fused, combo);
+  renderReport(rp);
   show('combo');
 }
 /** 오늘의 운세 · 올해·월별·띠 · 별자리 화면 열기. 생년월일이 없으면 사주 입력을 먼저 받는다. */
@@ -1234,7 +1243,7 @@ function openExtra(tab, { replace = false } = {}) {
 }
 function goto(name) {
   if (name === 'hub') { renderHub(); show('hub'); }
-  else if (name === 'combo') { if (combo.fused) { V.renderCombo(combo.fused, combo); show('combo'); } else goto('hub'); }
+  else if (name === 'combo') { if (combo.fused || combo.saju) openCombo(); else goto('hub'); }
   else if (name === 'result') { if (lastResult) show('result'); }
   else if (name === 'palm') { if (combo.palm) show('palm'); }
   else if (name === 'saju') { if (combo.saju) show('saju'); }
@@ -1304,14 +1313,15 @@ async function shareOrDownload(file, { title, text }) {
   showToast(IS_MOBILE ? '결과 카드를 다운로드했습니다. 사진첩이나 다운로드 폴더를 확인하세요.' : '결과 카드를 저장했습니다.');
 }
 async function saveComboCard() {
-  if (!combo.fused) return;
+  const rp = currentReport();
+  if (!rp) return;
   const btn = $('#combo-save'); btn.disabled = true;
   try {
-    const canvas = await V.drawComboCard(combo.fused, combo, combo.palm ? $('#palm-photo') : null);
+    const canvas = combo.fused ? await V.drawComboCard(combo.fused, combo, combo.palm ? $('#palm-photo') : null) : await X.drawReportCard(rp);
     const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9));
     if (!blob) throw new Error('카드 이미지를 만들지 못했습니다.');
     const file = new File([blob], `종합운세_${new Date().toISOString().slice(0, 10)}.jpg`, { type: 'image/jpeg' });
-    await shareOrDownload(file, { title: '관상·손금·사주 종합 결과', text: `나의 종합 운세는 ${combo.fused.avg}점, ${combo.fused.grade}!` });
+    await shareOrDownload(file, { title: '관상·손금·사주 종합 결과', text: `나의 종합 운세는 ${rp.total.score}점, ${rp.total.level.ko}!` });
   } catch (e) { console.error(e); showToast('결과 카드를 만들지 못했습니다.'); }
   finally { btn.disabled = false; }
 }
@@ -1330,6 +1340,7 @@ $('#hub-palm-up').addEventListener('click', () => { captureKind = 'palm'; palmIn
 $('#hub-palm-view').addEventListener('click', () => show('palm'));
 $('#hub-go').addEventListener('click', openCombo);
 document.querySelectorAll('.xtile').forEach(b => b.addEventListener('click', () => openExtra(b.dataset.extra)));
+document.addEventListener('click', (e) => { const b = e.target.closest('[data-open-extra]'); if (b) openExtra(b.dataset.openExtra); });
 $('#view-extra').addEventListener('click', (e) => {
   const tab = e.target.closest('[data-tab]'), d = e.target.closest('[data-d]'), mo = e.target.closest('[data-month]'), cap = e.target.closest('[data-capture]');
   if (!tab && !d && !mo && !cap) return;

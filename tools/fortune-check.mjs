@@ -9,6 +9,8 @@ import { computeMatch } from '../match.js';
 import { classifyAnimal } from '../animal-face.js';
 import { POP } from '../physiognomy.js';
 import { MAJOR, drawCards, readSpread } from '../tarot.js';
+import { buildReport } from '../report.js';
+import { analyze } from '../physiognomy.js';
 import { QUESTIONS, TYPES, scoreAnswers, axesFromCode, partners } from '../mbti.js';
 
 let bad = 0;
@@ -62,5 +64,16 @@ ok(QUESTIONS.length === 20 && [0, 1, 2, 3].every(a => QUESTIONS.filter(q => q[0]
 ok(Object.keys(TYPES).length === 16 && Object.values(TYPES).every(t => t.nick && t.kw.length === 3 && t.desc && t.strength && t.weak && t.love && t.work && t.stress && t.tip), '16유형 풀이 데이터 완비');
 ok(scoreAnswers(QUESTIONS.map(() => 'a')).code === 'ESTJ' && scoreAnswers(QUESTIONS.map(() => 'b')).code === 'INFP', '전부 앞 선택=ESTJ, 전부 뒤 선택=INFP');
 ok(partners('INFJ')[0] === 'ENFP' && partners('INFP').includes('ENTJ') && axesFromCode('ENTP').code === 'ENTP', '보완 유형 규칙');
+// 통합 리포트: 사주만 있어도 열리고, 모든 콘텐츠를 더하면 프로필·총평·실천이 늘어나며, 점수 가중(바탕 65% + 흐름 35%)이 맞는다
+const rpA = buildReport({ saju: A, date: new Date(2026, 9, 6, 10) });
+ok(rpA && rpA.profile.length === 3 && rpA.flow && rpA.texts.length >= 4, '사주만으로도 통합 리포트 생성(프로필 3, 흐름 포함)');
+const feat2 = { ...avgFace, symmetry: 0.8, pose: { yaw: 0, pitch: 0, roll: 0 }, frames: 1 };
+const drawnR = drawCards('three', { who: 'r' }), tarotR = { spread: 'three', question: '', reading: readSpread('three', drawnR) };
+const rpB = buildReport({ saju: A, face: analyze(feat2), partner: { name: '상대', state: B }, tarot: tarotR, mbti: scoreAnswers(QUESTIONS.map((q, i) => (i % 2 ? 'a' : 'b'))), date: new Date(2026, 9, 6, 10) });
+ok(rpB.profile.length >= 8 && rpB.texts.length > rpA.texts.length && rpB.has.animal && rpB.has.tarot && rpB.has.partner && rpB.has.mbti, '모든 콘텐츠를 더하면 프로필·총평이 늘어남');
+ok(rpB.total.score === Math.round(0.65 * rpB.base.score + 0.35 * rpB.flow.score), '종합 지수 = 바탕 65% + 흐름 35%');
+ok(rpB.flow.score === Math.round(0.4 * rpB.flow.today + 0.35 * rpB.flow.year + 0.25 * rpB.flow.bio), '흐름 지수 = 오늘 40% + 올해 35% + 바이오리듬 25%');
+ok(F.hourlyFortune(A, new Date(2026, 9, 6, 10)).hours.length === 12, '시간대(시진) 12개 점수');
+ok(buildReport({ face: analyze(feat2) }) === null, '사주도 관상·손금 합산도 없으면 리포트 없음');
 console.log(bad ? `\n실패 ${bad}건` : '\n모두 통과');
 process.exit(bad ? 1 : 0);

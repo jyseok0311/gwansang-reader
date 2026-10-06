@@ -223,6 +223,7 @@
 
       <h3 class="sec"><span>十二宮</span>열두 궁의 기운</h3>
       <div id="palaces" class="palaces"></div>
+      <div class="chart-card wide"><h4>열두 궁 휠 · 바깥으로 뻗을수록 좋은 궁</h4><canvas id="face-wheel" class="chart wheel" role="img"></canvas><div class="chart-legend"><span><i style="background:#ffb24d"></i>上</span><span><i style="background:#6fd39a"></i>中</span><span><i style="background:#8a8f9e"></i>下</span></div></div>
 
       <h3 class="sec"><span>五官</span>부위별 풀이</h3>
       <div id="parts" class="parts"></div>
@@ -304,6 +305,8 @@
       <div class="chart-grid">
         <div class="chart-card"><h4>오행 구성도</h4><canvas id="saju-elmap" class="chart elmap" role="img"></canvas><p class="chart-hint">노란 실선 화살표는 서로 살리는 상생, 붉은 점선은 서로 누르는 상극입니다. 원의 크기는 글자 수입니다.</p></div>
         <div class="chart-card"><h4>인생 영역별 운세</h4><canvas id="saju-radar" class="chart radar" role="img"></canvas></div>
+        <div class="chart-card"><h4>오행 비율</h4><canvas id="saju-donut" class="chart donut" role="img"></canvas><div id="saju-donut-legend" class="chart-legend"></div></div>
+        <div class="chart-card"><h4>십성 분포</h4><canvas id="saju-godcols" class="chart cols" role="img"></canvas></div>
       </div>
 
       <h3 class="sec"><span>十星</span>기운의 쓰임</h3>
@@ -354,6 +357,7 @@
       <div class="chart-grid">
         <div class="chart-card"><h4>네 선의 뚜렷함·길이</h4><canvas id="palm-line-radar" class="chart radar" role="img"></canvas></div>
         <div class="chart-card"><h4>인생 영역별 운세</h4><canvas id="palm-radar" class="chart radar" role="img"></canvas></div>
+        <div class="chart-card"><h4>손가락 길이 (손바닥 길이 대비)</h4><canvas id="palm-fingers" class="chart cols" role="img"></canvas></div>
       </div>
 
       <h3 class="sec"><span>特徵</span>가장 두드러진 특징</h3>
@@ -412,13 +416,22 @@
 
     <!-- 종합 결과 -->
     <section id="view-combo" class="panel hidden result combo">
-      <div class="combo-hero">
-        <div class="combo-hero-label">관상 · 손금 · 사주 종합</div>
-        <div class="combo-score"><b id="combo-avg">0</b><span>점</span></div>
+      <div class="combo-hero" id="combo-hero">
+        <div id="combo-hero-label" class="combo-hero-label">종합 리포트</div>
+        <canvas id="rp-rings" class="chart rings" role="img"></canvas>
+        <div class="combo-score hidden"><b id="combo-avg">0</b><span>점</span></div>
         <div id="combo-grade" class="combo-grade"></div>
+        <div id="rp-legend" class="rp-legend"></div>
         <div id="combo-sources" class="combo-sources"></div>
       </div>
 
+      <h3 class="sec"><span>總</span>통합 총평</h3>
+      <div id="rp-summary" class="summary"></div>
+
+      <h3 class="sec"><span>像</span>나의 프로필</h3>
+      <div id="rp-profile" class="rp-profile"></div>
+
+      <div id="combo-core">
       <h3 class="sec"><span>立體</span>운명 구성도 · 3D</h3>
       <div class="chart-card wide">
         <canvas id="combo-orrery" class="chart orrery" role="img" tabindex="0"></canvas>
@@ -439,8 +452,15 @@
       <h3 class="sec"><span>五運</span>다섯 가지 운 종합</h3>
       <div id="combo-fortunes" class="combo-fortunes"></div>
 
-      <h3 class="sec"><span>總評</span>종합 총평</h3>
+      <h3 class="sec"><span>總評</span>관상 · 손금 · 사주 총평</h3>
       <div id="combo-summary" class="summary"></div>
+      </div>
+
+      <div id="rp-flow"></div>
+      <div id="rp-more"></div>
+
+      <h3 class="sec"><span>實</span>오늘의 실천</h3>
+      <div id="rp-actions" class="rp-actions"></div>
 
       <h3 class="sec"><span>詳細</span>자세히 보기</h3>
       <div class="detail-links">
@@ -448,8 +468,16 @@
         <button class="ghost" type="button" data-goto="palm" id="dl-palm">手 손금 결과</button>
         <button class="ghost" type="button" data-goto="saju" id="dl-saju">命 사주 결과</button>
       </div>
+      <div class="detail-links" style="margin-top:8px">
+        <button class="ghost" type="button" data-open-extra="today">今 오늘</button>
+        <button class="ghost" type="button" data-open-extra="year">歲 올해·띠</button>
+        <button class="ghost" type="button" data-open-extra="zodiac">星 별자리</button>
+        <button class="ghost" type="button" data-open-extra="bio">律 바이오리듬</button>
+        <button class="ghost" type="button" data-open-extra="tarot">牌 타로</button>
+        <button class="ghost" type="button" data-open-extra="mbti">性 MBTI</button>
+      </div>
 
-      <p class="disclaimer">※ 관상·손금·사주는 서로 다른 전통 이론을 오락용으로 엮은 결과이며 과학적 근거가 없습니다.</p>
+      <p class="disclaimer">※ 관상·손금·사주·별자리·타로·MBTI·바이오리듬 등 서로 다른 이론을 오락용으로 엮은 결과이며 과학적 근거가 없습니다. 타로·궁합·MBTI·동물상은 점수에 넣지 않고 풀이에만 곁들였습니다.</p>
       <div class="result-bar">
         <button class="primary" type="button" data-goto="hub">🏠 처음으로</button>
         <button class="ghost" type="button" id="combo-save">💾 결과 저장</button>

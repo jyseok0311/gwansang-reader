@@ -376,6 +376,100 @@ export function createOrrery(canvas, { axes, layers }) {
   return canvas._chart;
 }
 
+// ── 5. 링 게이지 · 겹링 · 도넛 · 휠 · 히트맵 · 막대 ─────────────
+const arcPath = (ctx, cx, cy, r, a0, a1) => { ctx.beginPath(); ctx.arc(cx, cy, r, a0, a1); };
+
+/** 같은 중심의 여러 링 (바깥 → 안쪽 순서). 가운데에 큰 글자 */
+export function drawRings(ctx, w, h, k, { rings, center = '', centerSub = '', min = 0, max = 100 }) {
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 4, n = rings.length, lw = Math.min(R * 0.5 / n, R * 0.14), gap = lw * 0.35;
+  rings.forEach((g, i) => {
+    const r = R - lw / 2 - i * (lw + gap);
+    ctx.lineCap = 'round'; ctx.lineWidth = lw; ctx.strokeStyle = 'rgba(244,241,234,.08)'; arcPath(ctx, cx, cy, r, 0, TAU); ctx.stroke();
+    const frac = clamp((g.value - (g.min ?? min)) / ((g.max ?? max) - (g.min ?? min)), 0, 1);
+    ctx.save(); ctx.shadowColor = rgba(g.color, 0.75); ctx.shadowBlur = 10; ctx.strokeStyle = g.color; arcPath(ctx, cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.max(0.02, frac * TAU * k)); ctx.stroke(); ctx.restore();
+  });
+  const innerR = R - n * (lw + gap);
+  if (center) label(ctx, center, cx, cy - (centerSub ? innerR * 0.12 : 0), { size: Math.max(16, innerR * 0.95), weight: 900, font: SERIF });
+  if (centerSub) label(ctx, centerSub, cx, cy + innerR * 0.6, { size: Math.max(10, innerR * 0.3), color: MUTED });
+}
+
+/** 비율 도넛 */
+export function drawDonut(ctx, w, h, k, { items, center = '', centerSub = '' }) {
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 6, lw = R * 0.34, r = R - lw / 2, tot = items.reduce((a, x) => a + x.value, 0) || 1;
+  let a0 = -Math.PI / 2; const gapA = items.filter(x => x.value > 0).length > 1 ? 0.04 : 0;
+  ctx.lineWidth = lw; ctx.lineCap = 'butt';
+  for (const it of items) {
+    if (!it.value) continue;
+    const span = it.value / tot * TAU * k;
+    ctx.save(); ctx.shadowColor = rgba(it.color, 0.55); ctx.shadowBlur = 8; ctx.strokeStyle = it.color; arcPath(ctx, cx, cy, r, a0 + gapA / 2, a0 + Math.max(0.01, span - gapA / 2)); ctx.stroke(); ctx.restore();
+    if (span > 0.45) { const m = a0 + span / 2, tx = cx + Math.cos(m) * r, ty = cy + Math.sin(m) * r; label(ctx, it.label, tx, ty, { size: clamp(lw * 0.5, 11, 20), weight: 900, font: SERIF, color: '#0a0b12' }); }
+    a0 += span;
+  }
+  if (center) label(ctx, center, cx, cy - (centerSub ? R * 0.1 : 0), { size: R * 0.46, weight: 900, font: SERIF });
+  if (centerSub) label(ctx, centerSub, cx, cy + R * 0.3, { size: R * 0.15, color: MUTED });
+}
+
+/**
+ * 열두 칸 휠. segs: [{ label, sub?, color, fill(0~1), active? }] 시계 방향, 0번이 위쪽에서 시작.
+ * marks: [{ deg, color, text? }] 바깥 고리 위에 찍는 점(별자리 휠의 태양·달 위치).
+ */
+export function drawWheel(ctx, w, h, k, { segs, center = '', centerSub = '', marks = [], startDeg = -90 }) {
+  const n = segs.length, cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 20, r0 = R * 0.38, step = TAU / n, st = startDeg * Math.PI / 180;
+  segs.forEach((g, i) => {
+    const a0 = st + i * step + 0.012, a1 = st + (i + 1) * step - 0.012, rr = r0 + (R - r0) * (0.35 + 0.65 * clamp(g.fill, 0, 1) * k);
+    ctx.beginPath(); ctx.arc(cx, cy, R, a0, a1); ctx.arc(cx, cy, r0, a1, a0, true); ctx.closePath(); ctx.fillStyle = 'rgba(244,241,234,.05)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, cy, rr, a0, a1); ctx.arc(cx, cy, r0, a1, a0, true); ctx.closePath();
+    ctx.save(); if (g.active) { ctx.shadowColor = rgba(g.color, 0.9); ctx.shadowBlur = 16; }
+    ctx.fillStyle = rgba(g.color, g.active ? 0.9 : 0.55); ctx.fill(); ctx.restore();
+    if (g.active) { ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(cx, cy, R, a0, a1); ctx.arc(cx, cy, r0, a1, a0, true); ctx.closePath(); ctx.stroke(); }
+    const m = (a0 + a1) / 2, lr = (r0 + R) / 2, tx = cx + Math.cos(m) * lr, ty = cy + Math.sin(m) * lr;
+    label(ctx, g.label, tx, ty - (g.sub ? 6 : 0), { size: clamp(R * 0.11, 11, 18), weight: 700, color: g.active ? '#fff' : INK });
+    if (g.sub) label(ctx, g.sub, tx, ty + 9, { size: clamp(R * 0.075, 9, 13), color: MUTED });
+  });
+  for (const mk of marks) {
+    const a = st + mk.deg * Math.PI / 180, x = cx + Math.cos(a) * (R + 9), y = cy + Math.sin(a) * (R + 9);
+    ctx.save(); ctx.shadowColor = mk.color; ctx.shadowBlur = 10; ctx.beginPath(); ctx.arc(x, y, 7 * k, 0, TAU); ctx.fillStyle = mk.color; ctx.fill(); ctx.restore();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = '#fff'; ctx.stroke();
+    if (mk.text) label(ctx, mk.text, x, y + 0.5, { size: 9, weight: 900, color: '#0a0b12' });
+  }
+  if (center) label(ctx, center, cx, cy - (centerSub ? 9 : 0), { size: r0 * 0.7, weight: 900, font: SERIF });
+  if (centerSub) label(ctx, centerSub, cx, cy + r0 * 0.42, { size: Math.max(10, r0 * 0.24), color: MUTED });
+}
+
+/** 히트맵(행 × 열). values[row][col] */
+export function drawHeatmap(ctx, w, h, k, { rows, cols, values, min = 50, max = 95, hot = SRC_COLOR.all, highlightCol = -1 }) {
+  const fs = clamp(w / 32, 9, 12), padL = fs * 4, padT = fs * 1.8, cw = (w - padL - 2) / cols.length, ch = (h - padT - 2) / rows.length;
+  cols.forEach((c, j) => label(ctx, c, padL + cw * (j + 0.5), padT * 0.55, { size: fs * 0.95, color: j === highlightCol ? '#ffd08a' : MUTED, weight: j === highlightCol ? 700 : 500 }));
+  rows.forEach((rw, i) => {
+    label(ctx, rw, padL - 6, padT + ch * (i + 0.5), { size: fs, align: 'right', weight: 700 });
+    cols.forEach((_, j) => {
+      const v = values[i][j], t = clamp((v - min) / (max - min), 0, 1) * k, x = padL + cw * j + 1.5, y = padT + ch * i + 1.5;
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, cw - 3, ch - 3, 5) : ctx.rect(x, y, cw - 3, ch - 3);
+      ctx.fillStyle = `rgba(255,${Math.round(110 + 80 * t)},${Math.round(60 - 10 * t)},${0.08 + 0.82 * t})`; ctx.fill();
+      if (j === highlightCol) { ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffd08a'; ctx.stroke(); }
+      if (cw > 22 && k > 0.9) label(ctx, String(v), x + (cw - 3) / 2, y + (ch - 3) / 2, { size: fs * 0.88, color: t > 0.55 ? '#1a1206' : INK, weight: 700 });
+    });
+  });
+}
+
+/** 세로 막대(여러 계열 묶음). series: [{ color, values, name? }] */
+export function drawColumns(ctx, w, h, k, { labels, series, min = 0, max, highlight = -1, showValues = true, fmt = (v) => String(Math.round(v)) }) {
+  const n = labels.length, fs = clamp(w / 30, 10, 13), padT = fs * 1.8, padB = fs * 2.4, padX = w * 0.04;
+  const hi = (max ?? Math.max(...series.flatMap(s => s.values)) * 1.1) || 1, gw = (w - padX * 2) / n, bw = Math.min(gw * 0.7 / series.length, 34);
+  const gy = (v) => padT + (1 - clamp((v - min) / (hi - min), 0, 1)) * (h - padT - padB);
+  ctx.strokeStyle = GRID; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(padX, h - padB); ctx.lineTo(w - padX, h - padB); ctx.stroke();
+  labels.forEach((lb, i) => {
+    const gx = padX + gw * (i + 0.5), x0 = gx - bw * series.length / 2;
+    series.forEach((s, j) => {
+      const y1 = h - padB, y0 = y1 - (y1 - gy(s.values[i])) * k, x = x0 + j * bw;
+      ctx.save(); if (i === highlight) { ctx.shadowColor = rgba(s.color, 0.9); ctx.shadowBlur = 14; }
+      ctx.fillStyle = i === highlight ? s.color : rgba(s.color, 0.78); ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x + 1, y0, bw - 2, Math.max(2, y1 - y0), [5, 5, 0, 0]) : ctx.rect(x + 1, y0, bw - 2, Math.max(2, y1 - y0)); ctx.fill(); ctx.restore();
+      if (showValues && k > 0.9 && (series.length === 1 ? true : bw > 16)) label(ctx, fmt(s.values[i]), x + bw / 2, y0 - fs * 0.8, { size: fs * 0.85, color: i === highlight ? '#fff' : MUTED, weight: i === highlight ? 700 : 500 });
+    });
+    label(ctx, lb, gx, h - padB + fs * 1.3, { size: fs * 0.95, color: i === highlight ? '#ffd08a' : MUTED, weight: i === highlight ? 700 : 500 });
+  });
+}
+
 /** 결과 카드(이미지)에 넣을 레이더를 화면 밖 캔버스에 완성된 모습으로 그려 돌려준다 */
 export function renderRadarImage(size, opts) {
   const cv = document.createElement('canvas');

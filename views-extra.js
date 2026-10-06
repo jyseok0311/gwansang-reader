@@ -1,14 +1,15 @@
 // ─────────────────────────────────────────────────────────────
 //  오늘의 운세 · 올해·월별 운세 · 띠 · 별자리 화면과 오늘의 운세 카드
 // ─────────────────────────────────────────────────────────────
-import { dailyFortune, yearlyFortune, zodiacProfile, AREA_KEYS, AREA_NAMES, levelOf } from './fortune-time.js';
-import { SRC_COLOR, mountChart, drawRadar, drawMonthly, drawBio } from './charts.js';
+import { dailyFortune, yearlyFortune, zodiacProfile, hourlyFortune, moonInfo, SIGNS, AREA_KEYS, AREA_NAMES, levelOf } from './fortune-time.js';
+import { SRC_COLOR, mountChart, drawRadar, drawMonthly, drawBio, drawRings, drawWheel, drawHeatmap, drawColumns } from './charts.js';
 import { esc, $, wrapLines, roundRect } from './util.js';
 import { biorhythm, CYCLES } from './biorhythm.js';
 import { classifyAnimal, ANIMALS } from './animal-face.js';
 import { computeMatch, MATCH_AXES } from './match.js';
+import { ELEMENTS as ELM } from './saju.js';
 import { computeSaju, interpretSaju } from './saju.js';
-import { SPREADS, drawCards, readSpread, dayKey } from './tarot.js';
+import { SPREADS, drawCards, readSpread } from './tarot.js';
 import { QUESTIONS, AXES as MB_AXES, TYPES, scoreAnswers, axesFromCode, partners, crossReading } from './mbti.js';
 
 const ICON = { wealth: '🪙', love: '💞', career: '🏛️', health: '🌿', social: '🤝' };
@@ -44,6 +45,8 @@ function renderToday(state, offset) {
     </div>
     <h3 class="sec"><span>圖</span>영역별 운세</h3>
     <div class="chart-grid"><div class="chart-card"><canvas id="today-radar" class="chart radar" role="img"></canvas></div><div class="fortunes one">${areaRows(r.scores)}</div></div>
+    <h3 class="sec"><span>時</span>하루 시간대 흐름</h3>
+    <div class="chart-card wide"><canvas id="today-hours" class="chart cols tall" role="img"></canvas><p class="chart-hint" id="today-hours-hint"></p></div>
     <h3 class="sec"><span>解</span>오늘의 풀이</h3>
     <div class="summary">${r.texts.map(t => `<p>${esc(t)}</p>`).join('')}</div>
     <h3 class="sec"><span>吉</span>행운 포인트</h3>
@@ -63,6 +66,10 @@ function renderToday(state, offset) {
   const radar = $('#today-radar'), v = AREA_KEYS.map(k => r.scores[k]);
   radar.setAttribute('aria-label', '오늘의 영역별 점수: ' + AXES.map((x, i) => `${x.label} ${v[i]}점`).join(', '));
   mountChart(radar, (ctx, w, h, k) => drawRadar(ctx, w, h, k, { axes: AXES, series: [{ color: SRC_COLOR.all, values: v, glow: true }] }));
+  const hf = hourlyFortune(state, date), hc = $('#today-hours');
+  hc.setAttribute('aria-label', '시간대별 점수: ' + hf.hours.map(x => `${x.name} ${x.avg}`).join(', '));
+  $('#today-hours-hint').textContent = `열두 시진의 기운을 내 일간과 비교한 점수입니다. 가장 좋은 시간은 ${hf.best.name}(${hf.best.range}시) ${hf.best.avg}점, 조심할 시간은 ${hf.worst.name}(${hf.worst.range}시) ${hf.worst.avg}점입니다.`;
+  mountChart(hc, (ctx, w, h, k) => drawColumns(ctx, w, h, k, { labels: hf.hours.map(x => x.name.replace('시', '')), min: 50, max: 95, highlight: offset === 0 ? hf.nowIdx : hf.best.i, series: [{ color: SRC_COLOR.all, values: hf.hours.map(x => x.avg) }] }));
   animate('#extra-today');
   return r;
 }
@@ -83,6 +90,8 @@ function renderYear(state, selMonth) {
     <h3 class="sec"><span>月</span>월별 운세 흐름</h3>
     <div class="chart-card wide"><canvas id="year-monthly" class="chart monthly" role="img"></canvas>
       <p class="chart-hint">월은 절기 기준의 간지(月建)로 읽었습니다. 점이 높을수록 그달의 흐름이 좋습니다.</p></div>
+    <h3 class="sec"><span>熱</span>월 × 영역 히트맵</h3>
+    <div class="chart-card wide"><canvas id="year-heat" class="chart heat" role="img"></canvas><p class="chart-hint">밝고 진할수록 그달 그 영역의 흐름이 좋습니다.</p></div>
     <div class="month-grid">${r.months.map(x => `<button type="button" data-month="${x.month}" class="${LV_CLASS[x.level.ko]}${x.month === sel ? ' sel' : ''}${x.month === curM ? ' cur' : ''}"><small>${x.month}월</small><b>${x.avg}</b></button>`).join('')}</div>
     <div class="astro-card month-detail">
       <p><b>${sel}월 · ${esc(m.ganji)}월 (${esc(m.godInfo.name)}) · ${m.avg}점 ${m.level.ko}</b><br>${esc(m.favorable ? m.godInfo.fav : m.godInfo.unfav)}</p>
@@ -101,6 +110,9 @@ function renderYear(state, selMonth) {
   const mc = $('#year-monthly'), vals = r.months.map(x => x.avg);
   mc.setAttribute('aria-label', '월별 운세 점수: ' + r.months.map(x => `${x.month}월 ${x.avg}점`).join(', '));
   mountChart(mc, (ctx, w, h, k) => drawMonthly(ctx, w, h, k, { values: vals, current: curM, selected: sel }));
+  const hm = $('#year-heat'), shortN = AREA_KEYS.map(k => SHORT[k]);
+  hm.setAttribute('aria-label', '월별·영역별 점수 히트맵');
+  mountChart(hm, (ctx, w, h, k) => drawHeatmap(ctx, w, h, k, { rows: shortN, cols: r.months.map(x => String(x.month)), values: AREA_KEYS.map(a => r.months.map(x => x.scores[a])), min: 50, max: 92, highlightCol: curM - 1 }));
   animate('#extra-year');
   return r;
 }
@@ -116,6 +128,8 @@ function renderZodiac(state) {
       <div class="combo-sources"><span class="on">${s.elKo}(${{ fire: '火', earth: '土', air: '風', water: '水' }[s.el]})</span><span class="on">${s.mode}궁</span><span class="on">수호성 ${esc(s.ruler)}</span></div>
     </div>
     ${z.nearBoundary ? `<p class="note">${esc(z.boundaryNote)}</p>` : ''}
+    <h3 class="sec"><span>輪</span>별자리 휠</h3>
+    <div class="chart-card wide"><canvas id="zodiac-wheel" class="chart wheel" role="img"></canvas><div class="chart-legend"><span><i style="background:#ffd08a"></i>☉ 나의 태양</span><span><i style="background:#fff"></i>☽ 오늘의 달</span></div></div>
     <h3 class="sec"><span>性</span>${s.name}의 성격</h3>
     <div class="summary"><p>${esc(s.text)}</p>
       <p><b>연애</b> ${esc(s.love)}</p><p><b>일</b> ${esc(s.career)}</p><p><b>조심할 점</b> ${esc(s.caution)}</p></div>
@@ -128,6 +142,10 @@ function renderZodiac(state) {
     </div>
     <h3 class="sec"><span>統</span>별자리 × 띠 × 사주</h3>
     <div class="summary"><p>${s.name}(${s.elKo})에 ${a}띠, 사주 일간은 ${esc(state.reading.dayMaster.ko)}${esc(state.reading.dayMaster.elName.ko)}(${state.reading.dayMaster.hanja})입니다. 별자리는 태어난 계절의 태양 위치, 띠는 태어난 해, 사주는 태어난 때 전체를 바탕으로 한 서로 다른 전통이라 같은 사람에게도 다른 면을 비춥니다. 세 가지에서 겹치는 성향이 있다면 그것이 가장 뚜렷한 당신의 특징입니다.</p></div>`;
+  const EC = { fire: '#ff7a18', earth: '#c9a24a', air: '#4fc3ff', water: '#8a6bff' }, mn = moonInfo(new Date(), true), zw = $('#zodiac-wheel');
+  zw.setAttribute('aria-label', `별자리 휠: 나의 태양은 ${s.name}, 오늘의 달은 ${mn.sign.name}`);
+  mountChart(zw, (ctx, w, h, k) => drawWheel(ctx, w, h, k, { segs: SIGNS.map((g, i) => ({ label: g.sym, sub: g.name.replace('자리', ''), color: EC[g.el], fill: i === z.idx ? 1 : 0.6, active: i === z.idx })), center: s.sym, centerSub: s.name,
+    marks: [{ deg: z.lon, color: '#ffd08a', text: '☉' }, { deg: mn.lon, color: '#ffffff', text: '☽' }] }));
   animate('#extra-zodiac');
   return z;
 }
@@ -144,6 +162,8 @@ function renderBio(state) {
       <div class="combo-grade">${esc(r.level)}</div>
       <div class="combo-sources">${r.now.map(c => `<span class="on" style="border-color:${c.color}66">${c.name} ${c.value}%</span>`).join('')}</div>
     </div>
+    <h3 class="sec"><span>輪</span>오늘의 세 주기</h3>
+    <div class="chart-card wide"><canvas id="bio-rings" class="chart rings" role="img"></canvas><div class="chart-legend">${r.now.map(c => `<span><i style="background:${c.color}"></i>${c.name} ${c.value}%</span>`).join('')}</div></div>
     <h3 class="sec"><span>圖</span>앞뒤 한 달의 흐름</h3>
     <div class="chart-card wide"><canvas id="bio-chart" class="chart bio" role="img"></canvas>
       <div class="chart-legend">${CYCLES.map(c => `<span><i style="background:${c.color}"></i>${c.name} ${c.period}일</span>`).join('')}</div>
@@ -156,6 +176,8 @@ function renderBio(state) {
     <h3 class="sec"><span>期</span>다음 정점 · 저점 · 전환일</h3>
     <div class="bio-next">${CYCLES.map(c => { const n = r.next[c.key]; return `<div><b style="color:${c.color}">${c.name}</b>
       <span>정점 ${n.high ? addDays(n.high) + ` (${n.high}일 뒤)` : '-'}</span><span>저점 ${n.low ? addDays(n.low) + ` (${n.low}일 뒤)` : '-'}</span><span>전환 ${n.critical ? addDays(n.critical) + ` (${n.critical}일 뒤)` : '-'}</span></div>`; }).join('')}</div>`;
+  const br = $('#bio-rings'); br.setAttribute('aria-label', '오늘의 세 주기: ' + r.now.map(c => `${c.name} ${c.value}%`).join(', '));
+  mountChart(br, (ctx, w, h, k) => drawRings(ctx, w, h, k, { rings: r.now.map(c => ({ value: c.value, color: c.color, min: -100, max: 100 })), center: `${r.avg}%`, centerSub: '평균', min: -100, max: 100 }), { dur: 1000 });
   const cv = $('#bio-chart');
   cv.setAttribute('aria-label', '바이오리듬: ' + r.now.map(c => `${c.name} ${c.value}%`).join(', '));
   mountChart(cv, (ctx, w, h, k) => drawBio(ctx, w, h, k, { series: r.series, cycles: CYCLES }));
@@ -180,6 +202,8 @@ function renderAnimal(face) {
       <div class="combo-sources"><span class="on">2순위 ${S.emoji} ${S.name}</span></div>
     </div>
     ${r.reasons.length ? `<p class="note">이런 특징이 ${A.name}으로 이끌었어요: <b>${esc(r.reasons.join(' · '))}</b> 얼굴</p>` : ''}
+    <h3 class="sec"><span>圖</span>여덟 동물과의 닮은 정도</h3>
+    <div class="chart-card wide"><canvas id="animal-radar" class="chart radar" role="img"></canvas></div>
     <h3 class="sec"><span>比</span>동물상 비율</h3>
     <div class="fortunes one">${r.weights.slice(0, 5).map(w => `<div class="fortune"><div class="f-head"><span class="f-icon" aria-hidden="true">${w.animal.emoji}</span><b>${w.animal.name}</b><span class="f-score">${w.pct}%</span></div>
       <div class="meter gold"><i data-w="${Math.min(100, w.pct * 2.2)}%" style="--w:0%"></i></div></div>`).join('')}</div>
@@ -191,6 +215,10 @@ function renderAnimal(face) {
   // 얼굴 사진: 관상 결과 화면에 그려 둔 사진을 둥글게 가져온다 (기기 밖으로 나가지 않는다)
   const src = $('#result-photo'), cv = $('#animal-photo');
   if (src && src.width) { const sz = 144; cv.width = sz; cv.height = sz; const c = cv.getContext('2d'), sc = Math.max(sz / src.width, sz / src.height); c.drawImage(src, (sz - src.width * sc) / 2, (sz - src.height * sc) / 2 * 0.6, src.width * sc, src.height * sc); }
+  const ar = $('#animal-radar'), order = Object.values(ANIMALS), byKey = Object.fromEntries(r.weights.map(w => [w.animal.key, w.pct]));
+  const aax = order.map(a => ({ label: a.emoji })), avals = order.map(a => Math.round(40 + Math.min(60, byKey[a.key] * 2.4)));
+  ar.setAttribute('aria-label', '동물상 닮은 정도: ' + order.map(a => `${a.name} ${byKey[a.key]}%`).join(', '));
+  mountChart(ar, (c, w, h, k) => drawRadar(c, w, h, k, { axes: aax, showValues: false, series: [{ color: '#ff6ad5', values: avals, glow: true }] }));
   animate('#extra-animal');
   return r;
 }
@@ -261,12 +289,18 @@ function renderMatch(ctx) {
     <div class="chart-grid"><div class="chart-card"><canvas id="match-radar" class="chart radar" role="img"></canvas></div>
       <div class="fortunes one">${MATCH_AXES.map(x => `<div class="fortune"><div class="f-head"><b>${x.label}</b><small class="f-sub">${{ heart: '일간', life: '일지', fate: '띠', balance: '오행 보완', star: '별자리' }[x.key]}</small><span class="f-score">${r.axes[x.key]}</span></div>
         <div class="meter gold"><i data-w="${r.axes[x.key]}%" style="--w:0%"></i></div></div>`).join('')}</div></div>
+    <h3 class="sec"><span>五行</span>두 사람의 오행 분포</h3>
+    <div class="chart-card wide"><canvas id="match-elems" class="chart cols" role="img"></canvas><div class="chart-legend"><span><i style="background:#8a6bff"></i>나</span><span><i style="background:#ff6ad5"></i>${esc(P.name)}</span></div>
+      <p class="chart-hint">한쪽에 비어 있는 오행을 상대가 채워 주면 보완 점수가 올라갑니다.</p></div>
     <h3 class="sec"><span>解</span>궁합 풀이</h3>
     <div class="summary">${r.texts.map(t => `<p>${esc(t)}</p>`).join('')}</div>
     <div class="pm-actions"><button class="ghost" type="button" id="pm-reset">↺ 다른 사람과 궁합 보기</button></div>`;
   const radar = $('#match-radar'), v = MATCH_AXES.map(x => r.axes[x.key]);
   radar.setAttribute('aria-label', '궁합 점수: ' + MATCH_AXES.map((x, i) => `${x.label} ${v[i]}점`).join(', '));
   mountChart(radar, (c, w, h, k) => drawRadar(c, w, h, k, { axes: MATCH_AXES.map(x => ({ label: x.label })), series: [{ color: '#ff6ad5', values: v, glow: true }] }));
+  const EO = ['wood', 'fire', 'earth', 'metal', 'water'], me = ctx.saju.reading.counts, you = P.state.reading.counts, me_ = $('#match-elems');
+  me_.setAttribute('aria-label', '오행 분포 비교: ' + EO.map(e => `${ELM[e].name} 나 ${me[e]} 상대 ${you[e]}`).join(', '));
+  mountChart(me_, (c, w, h, k) => drawColumns(c, w, h, k, { labels: EO.map(e => ELM[e].hanja), min: 0, max: Math.max(5, ...EO.map(e => Math.max(me[e], you[e]))) + 0.5, series: [{ color: '#8a6bff', values: EO.map(e => me[e]) }, { color: '#ff6ad5', values: EO.map(e => you[e]) }] }));
   $('#pm-reset').addEventListener('click', ctx.onPartnerReset);
   animate('#extra-match');
   return r;
@@ -349,6 +383,8 @@ function mbtiResultHtml(ctx) {
       <div class="combo-grade">${esc(T.nick)}</div>
       <div class="combo-sources">${T.kw.map(k => `<span class="on">${esc(k)}</span>`).join('')}</div>
     </div>
+    <h3 class="sec"><span>輪</span>여덟 극의 균형</h3>
+    <div class="chart-card wide"><canvas id="mbti-radar" class="chart radar" role="img"></canvas></div>
     <h3 class="sec"><span>軸</span>네 가지 성향</h3>
     <div class="mb-axes">${R.axes.map(a => `<div class="mb-ax"><div class="mb-labels"><span class="${a.pick === a.a ? 'on' : ''}"><b>${a.a}</b> ${a.aName} ${a.pa}%</span><span class="${a.pick === a.b ? 'on' : ''}">${a.bName} ${a.pb}% <b>${a.b}</b></span></div>
       <div class="mb-track"><i style="width:${a.pa}%"></i><u style="width:${a.pb}%"></u></div></div>`).join('')}</div>
@@ -364,7 +400,10 @@ function mbtiResultHtml(ctx) {
 function renderMbti(ctx) {
   const root = $('#extra-mbti');
   const finish = (res) => { mbti.result = res; mbti.step = 'result'; renderMbti(ctx); };
-  if (mbti.step === 'result' && mbti.result) { root.innerHTML = mbtiResultHtml(ctx); $('#mb-reset').addEventListener('click', () => { Object.assign(mbti, { step: 'start', idx: 0, answers: [], result: null }); renderMbti(ctx); }); syncSave(); return mbti.result; }
+  if (mbti.step === 'result' && mbti.result) { root.innerHTML = mbtiResultHtml(ctx);
+    const R = mbti.result, poles = R.axes.flatMap(a => [{ label: a.a, v: a.pa }, { label: a.b, v: a.pb }]), mr = $('#mbti-radar');
+    mr.setAttribute('aria-label', '여덟 극: ' + poles.map(p => `${p.label} ${p.v}%`).join(', '));
+    mountChart(mr, (c, w, h, k) => drawRadar(c, w, h, k, { axes: poles.map(p => ({ label: p.label })), showValues: true, series: [{ color: '#4fc3ff', values: poles.map(p => 40 + p.v * 0.6), glow: true }] })); $('#mb-reset').addEventListener('click', () => { Object.assign(mbti, { step: 'start', idx: 0, answers: [], result: null }); renderMbti(ctx); }); syncSave(); return mbti.result; }
   if (mbti.step === 'quiz') {
     const q = QUESTIONS[mbti.idx], n = QUESTIONS.length;
     root.innerHTML = `<div class="mb-prog"><i style="width:${mbti.idx / n * 100}%"></i></div><p class="mb-count">${mbti.idx + 1} / ${n}</p>
@@ -393,6 +432,10 @@ function renderMbti(ctx) {
   $('#mb-know').addEventListener('click', () => { mbti.step = 'direct'; renderMbti(ctx); });
   syncSave(); return null;
 }
+
+/** 통합 리포트용: 오늘 모두 뒤집은 타로 / 끝낸 MBTI 결과 (없으면 null) */
+export const getTarot = () => (tarotDone() ? { spread: tarot.spread, question: tarot.question, reading: tarot.reading } : null);
+export const getMbti = () => mbti.result;
 
 const TABS = ['today', 'year', 'zodiac', 'bio', 'match', 'animal', 'tarot', 'mbti'];
 const SAVE_LABEL = { today: '💾 오늘 카드 저장', match: '💾 궁합 카드 저장', animal: '💾 동물상 카드 저장', tarot: '💾 타로 카드 저장', mbti: '💾 성향 카드 저장' };
@@ -486,5 +529,15 @@ export async function drawMbtiCard(ctx) {
     title: '나의 성향 유형', sub: T.kw.join(' · '), big: R.code, bigFont: 150, bigSub: T.nick, para: T.desc,
     bars: R.axes.map(a => ({ label: `${a.a} ${a.aName} ↔ ${a.bName} ${a.b}`, text: `${a.pick} ${Math.max(a.pa, a.pb)}%`, frac: Math.max(a.pa, a.pb) / 100 })),
     extra: ctx?.saju ? crossReading(R.code, ctx.saju).slice(0, 60) + '…' : '',
+  });
+}
+
+/** 통합 리포트 카드 (관상·손금·사주 합산이 없을 때도 쓴다) */
+export async function drawReportCard(rp) {
+  const bars = [{ label: '타고난 바탕', text: String(rp.base.score), frac: rp.base.score / 100 }];
+  if (rp.flow) bars.push({ label: '지금의 흐름', text: String(rp.flow.score), frac: rp.flow.score / 100 }, { label: '올해', text: String(rp.flow.year), frac: rp.flow.year / 100 }, { label: '오늘', text: String(rp.flow.today), frac: rp.flow.today / 100 });
+  return drawCard({
+    title: '나의 종합 리포트', sub: dateLabel(new Date()), big: String(rp.total.score), bigSub: `${rp.total.level.hanja} · ${rp.total.level.ko}`,
+    para: rp.texts.slice(0, 2).join(' '), bars, extra: rp.actions[0] ? `${rp.actions[0].icon} ${rp.actions[0].title}` : '',
   });
 }
