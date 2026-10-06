@@ -6,7 +6,8 @@
 import { analyze, clamp, gradeLabel } from './physiognomy.js';
 import { measure, LM, dist, mid, estimateDistance, correctPerspective } from './measure.js';
 import { computeSaju, interpretSaju } from './saju.js';
-import { analyzePalm, isPalmFacing, handSide as detectHandSide } from './palm.js';
+import { isPalmFacing, handSide as detectHandSide } from './palm.js';
+import { analyzePalmOffThread } from './palm-runner.js';
 import { interpretPalm } from './palm-reading.js';
 import { fuse } from './fusion.js';
 import * as V from './views-combo.js';
@@ -1116,7 +1117,7 @@ async function analyzePalmSnapshot({ history: histMode = 'push' } = {}) {
     if (!isPalmFacing(lm, res.handednesses?.[0]?.[0]?.categoryName)) throw new Error('BACKHAND');
     await sleep(40);   // 안내 화면이 먼저 그려지게 한 번 양보
     const img = snapshot.getContext('2d').getImageData(0, 0, snapshot.width, snapshot.height);
-    const analysis = analyzePalm(img, lm);
+    const analysis = await analyzePalmOffThread(img, lm);   // 무거운 계산은 Web Worker 에서 (화면이 멈추지 않도록)
     const side = detectHandSide(lm);   // 사진 속 손이 왼손인지 오른손인지는 손가락 방향으로 알아낸다
     const reading = interpretPalm(analysis, side);
     const src = document.createElement('canvas');   // 결과 화면에서 다시 그릴 수 있도록 사진을 따로 보관 (다른 손을 찍으면 snapshot 이 바뀐다)
