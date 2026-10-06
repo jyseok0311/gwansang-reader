@@ -115,6 +115,7 @@ function show(name, { history: mode = 'push' } = {}) {
   Object.entries(views).forEach(([k, el]) => el.classList.toggle('hidden', k !== name));
   document.body.classList.toggle('cam-open', name === 'camera');
   embers.set(name === 'hub' || name === 'combo');
+  if (name === 'camera') syncViewport();
   if (mode === 'push' && prev !== name) history.pushState({ view: name }, '');
   else if (mode === 'replace') history.replaceState({ view: name }, '');
   window.scrollTo({ top: 0, behavior: BAR_VIEWS.has(name) ? 'auto' : 'smooth' });
@@ -215,25 +216,52 @@ async function setHandMode(mode) {
 }
 
 // ── 카메라 ───────────────────────────────────────────────────
-async function startStream() {
-  stopStream();
-  const token = camToken;
-  // 휴대폰 브라우저는 해상도 값을 센서(가로) 기준으로 해석하고 세로 화면에서는 알아서 돌려준다.
-  // 세로 값(720x1280)을 요청하면 기기에 따라 가로 영상이 와서 화면이 한쪽으로 크게 잘리므로 항상 가로 기준으로 요청한다.
+// 휴대폰마다 해상도 값을 해석하는 방향이 다르다. 센서(가로) 기준으로 읽고 알아서 돌려 주는 기기도 있고,
+// 화면 방향 그대로 읽는 기기도 있다. 그래서 일단 가로(1280x720)로 요청해 보고, 세로 화면인데 가로 영상이 오면(또는 그 반대면)
+// 반대 방향으로 한 번 더 요청한다. 맞았던 방향은 화면 방향별로 기억해 다음부터 바로 쓴다.
+const streamMode = { p: 'land', l: 'land' };   // p: 세로 화면, l: 가로 화면 → 'land' | 'port'
+const screenPortrait = () => window.innerHeight > window.innerWidth;
+const feedPortrait = () => video.videoHeight > video.videoWidth;
+const orientationKey = () => (screenPortrait() ? 'p' : 'l');
+const orientationMismatch = () => IS_MOBILE && !!video.videoWidth && screenPortrait() !== feedPortrait();
+
+async function attachStream(mode, token) {
+  stopStream();   // 카메라를 쥐고 있는 채로 다시 요청하면 일부 기기가 "사용 중" 오류를 낸다
+  const port = mode === 'port';
   const s = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false,
+    video: { facingMode: { ideal: facing }, width: { ideal: port ? 720 : 1280 }, height: { ideal: port ? 1280 : 720 } }, audio: false,
   });
   if (token !== camToken) { s.getTracks().forEach(t => t.stop()); throw Object.assign(new Error('취소됨'), { name: 'AbortError' }); }
   stream = s;
   video.srcObject = s;
   if (video.readyState < 1) await new Promise(res => video.addEventListener('loadedmetadata', res, { once: true }));
   await video.play().catch(() => {});
+  if (!video.videoWidth) await new Promise(res => { video.addEventListener('resize', res, { once: true }); setTimeout(res, 800); });   // 일부 기기는 크기를 조금 늦게 알려 준다
+}
+
+async function startStream() {
+  const token = camToken;
+  const key = orientationKey();
+  await attachStream(streamMode[key], token);
+  if (orientationMismatch()) {
+    const other = streamMode[key] === 'land' ? 'port' : 'land';
+    try {
+      await attachStream(other, token);
+      if (orientationMismatch()) await attachStream(streamMode[key], token);   // 어느 쪽도 안 맞으면 원래대로
+      else streamMode[key] = other;
+    } catch (e) {
+      if (e.name === 'AbortError' || token !== camToken) throw e;
+      await attachStream(streamMode[key], token);
+    }
+  }
+  const s = stream;
   const settingsFacing = s.getVideoTracks()[0]?.getSettings?.().facingMode;
   // 노트북 웹캠은 방향 정보를 안 주는 경우가 많다. 컴퓨터에서는 거울처럼 좌우반전해서 보여 주는 것이 자연스럽다.
   const mirrored = settingsFacing ? settingsFacing === 'user' : (!IS_MOBILE || facing === 'user');
   camLayer.classList.toggle('mirror', mirrored);
   video.dataset.mirrored = mirrored ? '1' : '';
   geo.mirrored = mirrored;
+  syncViewport();
   syncOverlaySize();
   layoutCamera();
   updateSwitchButton();
@@ -271,7 +299,9 @@ function layoutCamera() {
   if (!vw || !vh || !sw || !sh) return;
   const cover = Math.max(sw / vw, sh / vh);
   const visibleFrac = Math.min(sw / (vw * cover), sh / (vh * cover));
-  const s = visibleFrac < 0.55 ? Math.min(sw / vw, sh / vh) : cover;
+  // 얼굴은 화면을 꽉 채운다. 세로 화면에 가로 영상이 올 때 작은 띠로 줄어들어 한가운데 떠 있는 것보다 낫다.
+  // 손바닥은 가장자리가 잘리면 손가락 끝이 안 보이므로, 절반 넘게 잘릴 때만 전체가 보이게 놓는다.
+  const s = captureKind === 'palm' && visibleFrac < 0.55 ? Math.min(sw / vw, sh / vh) : cover;
   const w = vw * s, h = vh * s, left = (sw - w) / 2, top = (sh - h) / 2;
   Object.assign(camLayer.style, { width: `${w}px`, height: `${h}px`, left: `${left}px`, top: `${top}px` });
 
@@ -280,7 +310,8 @@ function layoutCamera() {
   let availT = Math.max(0, top), availB = Math.min(sh, top + h);
   const stageR = camStage.getBoundingClientRect();
   const statusR = statusEl.getBoundingClientRect();
-  if (statusR.height && statusR.top - stageR.top < sh / 3) availT = Math.max(availT, statusR.bottom - stageR.top + 8);
+  // 안내 문구는 한 줄일 때도 두 줄일 때도 있으므로 실제 높이와 두 줄 높이 중 큰 쪽을 비워 둔다
+  if (statusR.height && statusR.top - stageR.top < sh / 3) availT = Math.max(availT, statusR.bottom - stageR.top + 8, 70 + safeTop());
   const ctrlR = camControls.getBoundingClientRect();
   const ctrlOverlaps = ctrlR.top < stageR.bottom - 1 && ctrlR.bottom > stageR.top && ctrlR.left < stageR.right - 1 && ctrlR.right > stageR.left + 1;
   if (ctrlOverlaps) availB = Math.min(availB, ctrlR.top - stageR.top - 8);
@@ -289,8 +320,27 @@ function layoutCamera() {
   const cx = (visL + visR) / 2, cy = (availT + availB) / 2;
   Object.assign(ovalEl.style, { width: `${ow}px`, height: `${oh}px`, left: `${cx - ow / 2}px`, top: `${cy - oh / 2}px`, transform: 'none', aspectRatio: 'auto' });
   Object.assign(geo, { s, left, top, vw, vh, sw, sh, oval: { cx, cy, w: ow, h: oh } });
+  debugInfo();
 }
-function relayoutCamera() { if (current === 'camera' && stream) layoutCamera(); }
+const DEBUG = new URLSearchParams(location.search).has('debug');
+function debugInfo() {
+  if (!DEBUG) return;
+  let el = $('#cam-debug');
+  if (!el) { el = document.createElement('pre'); el.id = 'cam-debug'; el.style.cssText = 'position:absolute;left:8px;bottom:190px;z-index:9;margin:0;padding:6px 8px;font:11px/1.35 monospace;color:#9f9;background:rgba(0,0,0,.7);border-radius:6px;pointer-events:none;white-space:pre'; camStage.appendChild(el); }
+  const vv = window.visualViewport;
+  el.textContent = `feed ${video.videoWidth}x${video.videoHeight} ${feedPortrait() ? 'portrait' : 'landscape'}\nscreen ${innerWidth}x${innerHeight} vv ${vv ? Math.round(vv.width) + 'x' + Math.round(vv.height) + ' s' + vv.scale.toFixed(2) : '-'}\nstage ${camStage.clientWidth}x${camStage.clientHeight} scale ${geo.s.toFixed(3)} mode ${streamMode.p}/${streamMode.l} mirror ${geo.mirrored ? 1 : 0}`;
+}
+function relayoutCamera() { if (current === 'camera') syncViewport(); if (current === 'camera' && stream) layoutCamera(); }
+const safeTop = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--safe-t')) || 0;
+/** 카메라 화면을 "지금 실제로 보이는 영역"에 맞춘다. 주소창이 접히거나 펴져도, 화면이 확대돼도 어긋나지 않는다. */
+function syncViewport() {
+  const vv = window.visualViewport, root = document.documentElement.style;
+  if (!vv) return;
+  root.setProperty('--vvh', `${Math.round(vv.height)}px`);
+  root.setProperty('--vvt', `${Math.round(vv.offsetTop)}px`);
+  root.setProperty('--vvl', `${Math.round(vv.offsetLeft)}px`);
+  root.setProperty('--vvw', `${Math.round(vv.width)}px`);
+}
 /** 영상 좌표 → 카메라 화면(스테이지) 좌표. 좌우반전을 반영한다. */
 function toDisplay(p) {
   const x = geo.mirrored ? geo.vw - p.x : p.x;
@@ -1258,7 +1308,19 @@ $('#btn-save').addEventListener('click', saveCard);
 
 window.addEventListener('resize', relayoutCamera);
 window.visualViewport?.addEventListener('resize', relayoutCamera);
-screen.orientation?.addEventListener?.('change', () => setTimeout(relayoutCamera, 250));
+window.visualViewport?.addEventListener('scroll', relayoutCamera);
+// 화면을 돌리면 카메라 영상 방향이 늦게 따라오거나 아예 어긋난 채로 남는 기기가 있어, 어긋났으면 다시 연다
+function onOrientationChange() {
+  setTimeout(() => {
+    relayoutCamera();
+    if (current === 'camera' && stream && orientationMismatch() && !capturing) openCamera();
+  }, 350);
+}
+screen.orientation?.addEventListener?.('change', onOrientationChange);
+window.addEventListener('orientationchange', onOrientationChange);
+// 카메라 화면에서는 두 손가락 확대와 끌어서 스크롤을 막는다 (확대·밀림이 생기면 영상과 윤곽선이 화면 밖으로 벗어난다)
+views.camera.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+for (const ev of ['gesturestart', 'gesturechange']) views.camera.addEventListener(ev, (e) => e.preventDefault());
 video.addEventListener('resize', () => { syncOverlaySize(); relayoutCamera(); });
 
 // 다른 앱으로 전환하면 카메라를 끄고, 돌아오면 다시 켠다 (배터리·개인정보 보호)
