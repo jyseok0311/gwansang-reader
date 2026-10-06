@@ -6,7 +6,7 @@
 import { analyze, clamp, gradeLabel } from './physiognomy.js';
 import { measure, LM, dist, mid, estimateDistance, correctPerspective } from './measure.js';
 import { computeSaju, interpretSaju } from './saju.js';
-import { analyzePalm, isPalmFacing } from './palm.js';
+import { analyzePalm, isPalmFacing, handSide as detectHandSide } from './palm.js';
 import { interpretPalm } from './palm-reading.js';
 import { fuse } from './fusion.js';
 import * as V from './views-combo.js';
@@ -64,7 +64,8 @@ const toast = $('#toast');
 // ── 상태 ─────────────────────────────────────────────────────
 const engine = { mod: null, vision: null, source: null, delegate: null, landmarker: null, mode: 'VIDEO', promise: null, hand: null, handMode: 'VIDEO', handPromise: null, handDelegate: null };
 // 종합 분석: 관상(face)·손금(palm)·사주(saju) 결과와 합친 결과(fused)
-const combo = { face: null, palm: null, saju: null, fused: null };
+// palm: 가장 최근에 본 손, palms: 왼손·오른손 각각 (둘 다 있으면 비교해 보여 주고 종합에는 평균을 쓴다)
+const combo = { face: null, palm: null, palms: { left: null, right: null }, saju: null, fused: null };
 let captureKind = 'face';   // 지금 카메라로 찍는 것: 'face' | 'palm'
 let handSide = 'right';     // 손금 촬영 때 안내선에 그릴 손: 'right' | 'left' (고른 값은 기억한다)
 try { if (localStorage.getItem('gwansang.hand') === 'left') handSide = 'left'; } catch { /* 무시 */ }
@@ -1113,17 +1114,22 @@ async function analyzePalmSnapshot({ history: histMode = 'push' } = {}) {
     await sleep(40);   // 안내 화면이 먼저 그려지게 한 번 양보
     const img = snapshot.getContext('2d').getImageData(0, 0, snapshot.width, snapshot.height);
     const analysis = analyzePalm(img, lm);
-    const reading = interpretPalm(analysis);
-    const palm = { analysis, reading, lm };
+    const side = detectHandSide(lm);   // 사진 속 손이 왼손인지 오른손인지는 손가락 방향으로 알아낸다
+    const reading = interpretPalm(analysis, side);
+    const src = document.createElement('canvas');   // 결과 화면에서 다시 그릴 수 있도록 사진을 따로 보관 (다른 손을 찍으면 snapshot 이 바뀐다)
+    src.width = snapshot.width; src.height = snapshot.height; src.getContext('2d').drawImage(snapshot, 0, 0);
+    const palm = { analysis, reading, lm, side, src };
+    combo.palms[side] = palm;
     combo.palm = palm;
     await stepUI;
     await sleep(250);
-    V.renderPalm(palm, snapshot);
+    V.renderPalm(palm, src, combo.palms);
     refreshFusion();
     renderHub();
     if (current !== 'analyzing') return;   // 분석 중 사용자가 뒤로 감
     backToHub();
-    showToast(analysis.quality.level === 'poor' ? '손금 분석이 끝났습니다. 사진이 흐려 정확도가 낮을 수 있어요.' : '손금 분석이 끝났습니다. 「결과 보기」로 확인하세요.', 4000);
+    const sn = reading.sideInfo.name, other = side === 'left' ? '오른손' : '왼손';
+    showToast(analysis.quality.level === 'poor' ? `${sn} 손금 분석이 끝났습니다. 사진이 흐려 정확도가 낮을 수 있어요.` : `${sn}으로 인식해 손금을 분석했습니다. ${combo.palms[side === 'left' ? 'right' : 'left'] ? '「결과 보기」에서 두 손을 비교해 보세요.' : `${other}도 찍으면 비교해 드려요.`}`, 4600);
   } catch (e) {
     await stepUI;
     console.error(e);
@@ -1157,7 +1163,15 @@ function backToHub() {
 }
 
 function refreshFusion() {
-  combo.fused = fuse({ face: combo.face || undefined, palm: combo.palm?.reading, saju: combo.saju?.reading });
+  combo.fused = fuse({ face: combo.face || undefined, palm: mergedPalmReading(), saju: combo.saju?.reading });
+}
+/** 두 손을 다 찍었으면 다섯 운 점수를 평균내어 종합에 쓴다 */
+function mergedPalmReading() {
+  const { left, right } = combo.palms;
+  if (!combo.palm) return undefined;
+  if (!(left && right)) return combo.palm.reading;
+  const f = {}; for (const k of Object.keys(left.reading.fortunes)) f[k] = Math.round((left.reading.fortunes[k] + right.reading.fortunes[k]) / 2);
+  return { ...combo.palm.reading, fortunes: f };
 }
 function syncBackLinks() {
   const has = !!combo.fused;
@@ -1181,7 +1195,8 @@ function renderHub() {
   $('#hub-saju').textContent = combo.saju ? '✎ 다시 입력' : '입력하기';
   $('#hub-face-status').textContent = combo.face ? `✓ ${combo.face.shape.primary.name} · ${combo.face.type.primary.name}` : '';
   $('#hub-face-cam').textContent = combo.face ? '📷 다시 촬영' : '📷 촬영';
-  $('#hub-palm-status').textContent = combo.palm ? `✓ ${combo.palm.reading.shape.primary.name} · ${combo.palm.analysis.quality.level === 'poor' ? '사진이 흐림' : '선을 찾았어요'}` : '';
+  const both = !!(combo.palms.left && combo.palms.right);
+  $('#hub-palm-status').textContent = combo.palm ? `✓ ${both ? '양손' : combo.palm.reading.sideInfo.name} · ${combo.palm.reading.shape.primary.name} · ${combo.palm.analysis.quality.level === 'poor' ? '사진이 흐림' : '선을 찾았어요'}${both ? '' : ' (반대 손도 찍으면 비교)'}` : '';
   $('#hub-palm-cam').textContent = combo.palm ? '📷 다시 촬영' : '📷 촬영';
   const n = Object.values(done).filter(Boolean).length;
   $$('#hub-pips i').forEach((el, i) => el.classList.toggle('on', i < n));
@@ -1293,7 +1308,13 @@ $('#hub-palm-cam').addEventListener('click', () => startCapture('palm'));
 $('#hub-palm-up').addEventListener('click', () => { captureKind = 'palm'; palmInput.click(); });
 $('#hub-palm-view').addEventListener('click', () => show('palm'));
 $('#hub-go').addEventListener('click', openCombo);
-$('#hub-reset').addEventListener('click', () => { combo.face = combo.palm = combo.saju = combo.fused = null; renderHub(); syncBackLinks(); showToast('처음부터 다시 시작합니다.'); });
+$('#hub-reset').addEventListener('click', () => { combo.face = combo.palm = combo.saju = combo.fused = null; combo.palms = { left: null, right: null }; lastResult = null; cardPromise = null; renderHub(); syncBackLinks(); showToast('처음부터 다시 시작합니다.'); });
+$('#palm-tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-side]'); const p = b && combo.palms[b.dataset.side];
+  if (!p) return;
+  combo.palm = p; refreshFusion();
+  V.renderPalm(p, p.src, combo.palms);
+});
 $('#palm-retake').addEventListener('click', () => startCapture('palm', { replace: true }));
 $('#combo-save').addEventListener('click', saveComboCard);
 for (const input of [palmInput, palmCaptureInput]) {

@@ -568,3 +568,28 @@ canvas.chart.orrery:focus-visible { outline: 2px solid var(--gold-2); outline-of
 .dots i.on { background: var(--iri); border-color: transparent; box-shadow: 0 0 8px rgba(138,107,255,.6); }
 .trait p { margin: 0; font-size: .86rem; color: var(--muted); line-height: 1.55; }
 .part .metrics { margin: 6px 0 0; font-size: .78rem; color: var(--dim); }
+
+/* 왼손 · 오른손 */
+.palm-side { margin: -4px 0 10px; color: var(--muted); font-size: .92rem; }
+.palm-side b { color: var(--gold-2); font-family: var(--serif); font-size: 1.05rem; }
+.palm-side small { color: var(--dim); }
+.palm-tabs { display: flex; gap: 8px; margin: 0 0 14px; }
+.palm-tabs button { flex: 1; min-height: 42px; padding: 8px 10px; font-size: .88rem; background: rgba(244,241,234,.04); border: 1px solid rgba(244,241,234,.16); border-radius: 12px; color: var(--muted); }
+.palm-tabs button.on { color: var(--ink); border-color: rgba(255,178,77,.6); background: rgba(255,178,77,.12); }
+.compare .note { margin: 0; }
+.cmp-legend { display: flex; gap: 16px; justify-content: center; margin: 0 0 10px; font-size: .82rem; color: var(--muted); }
+.cmp-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.cmp-legend i, .cmp-track i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+.cmp-legend i.l, .cmp-track i.l { background: #4fc3ff; }
+.cmp-legend i.r, .cmp-track i.r { background: #ffb24d; }
+.cmp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 10px; }
+.cmp-sub { margin: 18px 4px 8px; font-family: var(--serif); font-size: .98rem; }
+.cmp { background: var(--card); border: 1px solid var(--card-b); border-radius: 14px; padding: 12px 14px; }
+.cmp-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; font-size: .9rem; }
+.cmp-head span { color: var(--muted); font-size: .82rem; }
+.cmp-head .up { color: #6fd39a; font-weight: 700; } .cmp-head .down { color: #ff9a9a; font-weight: 700; }
+.cmp-track { position: relative; height: 12px; margin: 0 6px 8px; border-radius: 6px; background: rgba(244,241,234,.07); }
+.cmp-track i { position: absolute; top: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 8px currentColor; z-index: 2; }
+.cmp-track em { position: absolute; top: 4px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, #4fc3ff, #ffb24d); opacity: .75; }
+.cmp p { margin: 0; font-size: .84rem; color: var(--muted); line-height: 1.55; }
+.cmp-sum { margin: 12px 4px 0; font-size: .92rem; color: var(--body); line-height: 1.65; }

@@ -176,8 +176,40 @@ const HTXT = {
     '새끼손가락이 약지에서 크게 벌어져 자유로운 영혼으로, 스스로 길을 개척합니다.'] },
 };
 
-/** @param palm analyzePalm() 결과 */
-export function interpretPalm(palm) {
+// ── 왼손·오른손: 왼손은 타고난 바탕(선천), 오른손은 살아오며 다듬은 모습과 지금의 흐름(후천)으로 읽는다 ──
+export const SIDE = {
+  left: { key: 'left', name: '왼손', role: '타고난 기질과 바탕', kind: '선천운', lead: '왼손은 태어날 때 받은 바탕을 보여 주는 손으로 봅니다.',
+    close: '타고난 바탕이니 장점은 살리고 약한 부분은 노력으로 채워 가세요.' },
+  right: { key: 'right', name: '오른손', role: '살아오며 다듬어 온 모습과 지금의 흐름', kind: '후천운', lead: '오른손은 살아오며 노력해 다듬은 모습과 지금의 흐름을 보여 주는 손으로 봅니다.',
+    close: '이미 다듬어 온 모습이니 지금의 방향을 믿고 꾸준히 이어 가세요.' },
+};
+// 선마다 [약함, 보통, 강함] 문장
+const SIDE_LINE = {
+  heart: {
+    left: ['타고난 감정 표현이 담백한 바탕이라 마음을 여는 데 시간이 걸립니다.', '타고난 감정 표현이 무난하고 균형 잡힌 바탕입니다.', '타고난 감정의 그릇이 크고 정이 깊은 바탕입니다.'],
+    right: ['지금은 감정 표현을 아끼는 쪽이라 마음을 열 기회를 일부러 만들면 좋습니다.', '살아오며 감정을 다루는 방식이 안정적으로 다듬어졌습니다.', '살아오며 사랑과 정을 나누는 마음이 한층 깊어졌습니다.'],
+  },
+  head: {
+    left: ['타고난 직관형 두뇌라 배움으로 깊이를 더하면 크게 빛납니다.', '타고난 판단력이 고르게 갖춰진 바탕입니다.', '타고난 사고력과 집중력이 뛰어난 바탕입니다.'],
+    right: ['지금은 생각을 정리할 시간이 부족하니 기록하는 습관이 도움이 됩니다.', '경험을 거치며 판단이 안정적으로 자리 잡았습니다.', '공부와 경험으로 생각의 깊이를 키워 온 모습입니다.'],
+  },
+  life: {
+    left: ['타고난 체력을 아껴 쓰는 체질이라 일찍부터 생활 습관을 다지면 복이 됩니다.', '타고난 체력이 무난해 관리하는 만큼 좋아집니다.', '타고난 체력과 회복력이 든든한 바탕입니다.'],
+    right: ['지금은 피로가 쌓이기 쉬운 때이니 휴식과 규칙적인 생활이 우선입니다.', '지금의 생활 리듬이 건강을 안정적으로 지켜 주고 있습니다.', '생활을 잘 가꿔 활력이 한층 강해진 모습입니다.'],
+  },
+  fate: {
+    left: ['타고난 길이 정해져 있지 않아 스스로 만들어 갈 여지가 큽니다.', '타고난 방향은 열려 있어 환경에 따라 길이 정해집니다.', '타고난 뜻과 사명감이 뚜렷한 바탕입니다.'],
+    right: ['지금은 방향을 모색하는 시기라 여러 길을 시험해 보기 좋습니다.', '경험이 쌓이며 방향이 조금씩 선명해지고 있습니다.', '살아오며 걸어갈 길이 분명해지고 있습니다.'],
+  },
+};
+const cls3 = (zz) => (zz < -0.3 ? 0 : zz > 0.3 ? 2 : 1);
+
+/**
+ * @param palm analyzePalm() 결과
+ * @param side 'left' | 'right' — 사진 속 손 (handSide). 없으면 오른손으로 본다.
+ */
+export function interpretPalm(palm, side = 'right') {
+  const SI = SIDE[side] || SIDE.right, sk = SI.key;
   const L = palm.lines, rho = palm.frame.rho, h = palm.hand;
   const feat = (k) => {
     const m = L[k]?.m; if (!m) return null; const R = REF[k];
@@ -195,7 +227,7 @@ export function interpretPalm(palm) {
     const f = F.heart, m = f.m;
     readings.push({ key: 'heart', name: '감정선', hanja: '感情線', topic: '사랑과 감정', clarity: clarityLabel(m.contrast),
       headline: ['담백한 사랑', '조용한 사랑', '균형 잡힌 사랑', '깊고 오래가는 사랑', '넓고 헌신적인 사랑'][tier(f.zLen)],
-      text: `${pick(f.zLen, TXT.heart.len)} ${pick(f.zEnd, TXT.heart.end)} ${pick(f.zDev, TXT.heart.curve)}`, metrics: metrics(f) });
+      text: `${pick(f.zLen, TXT.heart.len)} ${pick(f.zEnd, TXT.heart.end)} ${pick(f.zDev, TXT.heart.curve)} ${SIDE_LINE.heart[sk][cls3(0.55 * f.zClr + 0.45 * f.zLen)]}`, metrics: metrics(f) });
   }
   let joinedDist = null;
   if (F.head) {
@@ -204,7 +236,7 @@ export function interpretPalm(palm) {
     const startTier = joinedDist === null ? 2 : joinedDist < 0.08 ? 0 : joinedDist < 0.16 ? 1 : joinedDist < 0.3 ? 2 : 3;
     readings.push({ key: 'head', name: '두뇌선', hanja: '頭腦線', topic: '지혜와 재능', clarity: clarityLabel(m.contrast),
       headline: ['빠른 결단', '간결한 사고', '균형 잡힌 사고', '신중한 사색', '풍부한 상상력'][tier(0.6 * f.zLen + 0.8 * f.zSlope)],
-      text: `${pick(f.zLen, TXT.head.len)} ${pick(f.zSlope, TXT.head.slope)} ${TXT.head.start[startTier]}`,
+      text: `${pick(f.zLen, TXT.head.len)} ${pick(f.zSlope, TXT.head.slope)} ${TXT.head.start[startTier]} ${SIDE_LINE.head[sk][cls3(0.55 * f.zClr + 0.45 * f.zLen)]}`,
       metrics: metrics(f, ` · 기울기 ${Math.round(f.slope)}°`) });
   }
   if (F.life) {
@@ -214,7 +246,7 @@ export function interpretPalm(palm) {
       : ' 선이 끊김 없이 이어져 꾸준한 기운을 보여 줍니다.';
     readings.push({ key: 'life', name: '생명선', hanja: '生命線', topic: '건강과 활력', clarity: clarityLabel(m.contrast),
       headline: ['아껴 쓰는 체력', '차분한 활력', '안정적인 활력', '강한 체력', '넘치는 생명력'][tier(f.zLen)],
-      text: `${pick(f.zLen, TXT.life.len)} ${pick(f.zDev, TXT.life.arc)}${brk}`, metrics: metrics(f) });
+      text: `${pick(f.zLen, TXT.life.len)} ${pick(f.zDev, TXT.life.arc)}${brk} ${SIDE_LINE.life[sk][cls3(0.55 * f.zClr + 0.45 * f.zLen)]}`, metrics: metrics(f) });
   }
   let fateClear = false;
   if (F.fate) {
@@ -228,7 +260,7 @@ export function interpretPalm(palm) {
       : (zF <= -0.9 ? '운명선이 거의 보이지 않아 정해진 길보다 스스로 길을 만들어 가는 자유로운 상입니다.' : '운명선이 옅어 환경 변화에 적응이 빠르고 여러 길을 시험해 보는 상입니다.');
     readings.push({ key: 'fate', name: '운명선', hanja: '運命線', topic: '직업과 삶의 방향', clarity: clarityLabel(m.contrast), faint: !fateClear,
       headline: fateClear ? (zF >= 1.0 ? '깊고 곧은 삶의 방향' : '뚜렷한 삶의 방향') : (zF <= -0.9 ? '자유롭게 여는 길' : '스스로 여는 길'),
-      text: `${head} ${origin}${reach}`, metrics: metrics(f) });
+      text: `${head} ${origin}${reach} ${SIDE_LINE.fate[sk][cls3(zF)]}`, metrics: metrics(f) });
   }
 
   // ── 손 모양 특징 ──
@@ -289,18 +321,18 @@ export function interpretPalm(palm) {
   }
   const standout = cand.sort((a, b) => b.score - a.score).slice(0, 4);
 
-  const summary = compose({ shape, readings, traits, standout, relations, fortunes, F, fateClear, ranked, headHeart, zH });
-  return { shape, readings, traits, standout, relations, summary, finger, thumb, fortunes, fateClear, lineScores };
+  const summary = compose({ shape, readings, traits, standout, relations, fortunes, F, fateClear, ranked, headHeart, zH, SI });
+  return { side: sk, sideInfo: SI, shape, readings, traits, standout, relations, summary, finger, thumb, fortunes, fateClear, lineScores };
 }
 
 // ── 총평 ─────────────────────────────────────────────────────
 const FN = { wealth: '재물운', love: '애정운', career: '직업운', health: '건강운', social: '대인운' };
 function compose(c) {
-  const { shape, readings, standout, relations, fortunes, F, fateClear, ranked, headHeart, zH } = c;
+  const { shape, readings, standout, relations, fortunes, F, fateClear, ranked, headHeart, zH, SI } = c;
   const P = [];
   const p = shape.primary, s = shape.secondary;
   const lead = ranked.length ? `${josa(NAMEH[ranked[0][0]], '이', '가')} 가장 또렷한` : '';
-  P.push(`손은 ${p.name}에 ${s.name}의 기운이 섞였고, ${lead ? lead + ' ' : ''}손입니다. ${p.text}`);
+  P.push(`${SI.lead} 이 ${SI.name}은 ${p.name}에 ${s.name}의 기운이 섞였고, ${lead ? lead + ' ' : ''}손입니다. ${p.text}`);
   if (standout.length) P.push(`이 손에서 가장 눈에 띄는 점은 다음과 같습니다. ${standout.slice(0, 3).map(x => x.text).join(' ')}`);
   if (relations.length) P.push(relations.join(' '));
   const ord = Object.entries(fortunes).sort((a, b) => b[1] - a[1]);
@@ -308,7 +340,7 @@ function compose(c) {
   P.push(`다섯 운 중에서는 ${josa(FN[best[0]], '이', '가')} ${best[1]}점으로 가장 좋고 ${josa(FN[worst[0]], '이', '가')} ${worst[1]}점으로 가장 조용합니다. ${ADVICE[worst[0]]}`);
   const key = ranked.length ? ranked[0][0] : 'life';
   const style = headHeart === 'head' ? '생각이 앞서는' : headHeart === 'heart' ? '마음이 앞서는' : '고르게 움직이는';
-  P.push(`${style} 사람일수록 ${CLOSE[key]} 손금은 손바닥 위의 흐름일 뿐, 지금의 선택이 그 선을 조금씩 바꿉니다.`);
+  P.push(`${style} 사람일수록 ${CLOSE[key]} ${SI.close} 손금은 손바닥 위의 흐름일 뿐, 지금의 선택이 그 선을 조금씩 바꿉니다.`);
   return P;
 }
 const NAMEH = { heart: '감정선', head: '두뇌선', life: '생명선', fate: '운명선' };
@@ -324,3 +356,38 @@ const CLOSE = {
   head: '생각을 글이나 계획으로 꺼내 정리하면 가진 재능이 더 빨리 열매를 맺습니다.',
   life: '몸이 곧 밑천이니 활력을 지키는 생활 리듬을 만들어 두면 모든 일이 수월해집니다.',
 };
+
+// ── 두 손 비교: 왼손(타고난 바탕)과 오른손(지금)의 차이 ──────────
+const CMP_NAME = { wealth: '재물운', love: '애정운', career: '직업운', health: '건강운', social: '대인운' };
+const LINE_NAME2 = { heart: '감정선', head: '두뇌선', life: '생명선', fate: '운명선' };
+const cmpText = (name, d) => (Math.abs(d) <= 3 ? '두 손이 비슷해 타고난 바탕과 지금의 모습이 일치합니다.'
+  : d > 0 ? `오른손(지금)이 ${d}점 높아 살아오며 노력으로 키워 온 부분입니다.`
+  : `왼손(타고난 바탕)이 ${-d}점 높아 아직 다 꺼내 쓰지 못한 잠재력이 남아 있습니다.`);
+
+/** @param left, right 각각 { reading } (interpretPalm 결과를 담은 손금 결과) */
+export function compareHands(left, right) {
+  const rows = Object.keys(CMP_NAME).map((k) => {
+    const a = left.reading.fortunes[k], b = right.reading.fortunes[k], d = b - a;
+    return { key: k, name: CMP_NAME[k], left: a, right: b, delta: d, text: cmpText(CMP_NAME[k], d) };
+  });
+  const lineRows = Object.keys(LINE_NAME2).map((k) => {
+    const a = left.reading.lineScores[k], b = right.reading.lineScores[k];
+    if (a == null && b == null) return null;
+    if (a == null || b == null) return { key: k, name: LINE_NAME2[k], left: a, right: b, delta: null, text: a == null ? `왼손에서는 찾지 못했지만 오른손에서는 보입니다. 살아오며 새로 또렷해진 선으로 볼 수 있습니다.` : `오른손에서는 흐려졌습니다. 타고난 바탕 중 아직 쓰지 못한 부분입니다.` };
+    const d = b - a;
+    return { key: k, name: LINE_NAME2[k], left: a, right: b, delta: d, text: cmpText(LINE_NAME2[k], d) };
+  }).filter(Boolean);
+  const mean = (r) => Math.round(Object.values(r.reading.fortunes).reduce((x, y) => x + y, 0) / 5);
+  const mL = mean(left), mR = mean(right), dm = mR - mL;
+  const up = [...rows].sort((x, y) => y.delta - x.delta)[0], down = [...rows].sort((x, y) => x.delta - y.delta)[0];
+  const summary = [];
+  summary.push(Math.abs(dm) <= 2
+    ? `두 손의 평균 점수가 ${mL}점과 ${mR}점으로 비슷해, 타고난 바탕과 지금의 모습이 크게 어긋나지 않습니다.`
+    : dm > 0 ? `왼손 평균 ${mL}점, 오른손 평균 ${mR}점으로 오른손이 높습니다. 타고난 바탕보다 살아오며 가꾼 부분이 더 빛나는 사람입니다.`
+    : `왼손 평균 ${mL}점, 오른손 평균 ${mR}점으로 왼손이 높습니다. 타고난 바탕이 좋은데 아직 다 펼치지 못했을 수 있어 앞으로가 기대됩니다.`);
+  if (up.delta > 3) summary.push(`가장 크게 자란 영역은 ${up.name}입니다 (${up.left}점 → ${up.right}점). 노력이 결실을 맺은 자리입니다.`);
+  if (down.delta < -3) summary.push(`반대로 ${josa(down.name, '은', '는')} 타고난 ${down.left}점에서 ${down.right}점으로 내려와 있어, 의식적으로 돌보면 다시 올릴 수 있습니다.`);
+  const l = left.reading.shape.primary, r = right.reading.shape.primary;
+  if (l.key !== r.key) summary.push(`손 모양은 왼손이 ${l.name}, 오른손이 ${r.name}으로 달라, 타고난 기질과 지금 드러나는 기질이 조금 다른 사람입니다.`);
+  return { rows, lineRows, summary, means: [mL, mR] };
+}

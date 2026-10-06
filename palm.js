@@ -414,6 +414,15 @@ export function handShape(lm) {
 }
 
 // ── 7. 사진 상태 검사 ────────────────────────────────────────
+/**
+ * 손바닥이 카메라를 향한 사진에서 어느 쪽 손인지 (isPalmFacing 이 참일 때만 뜻이 있다).
+ * 손바닥이 보이고 손가락이 위를 향하면 오른손은 엄지가 오른쪽(검지 뿌리가 새끼 뿌리보다 오른쪽)에 온다.
+ */
+export function handSide(lm) {
+  const cross = (lm[5].x - lm[0].x) * (lm[17].y - lm[0].y) - (lm[5].y - lm[0].y) * (lm[17].x - lm[0].x);
+  return cross < 0 ? 'right' : 'left';
+}
+
 /** 손바닥 쪽이 카메라를 향하는지 (손가락 방향과 손 좌우 표시 기준). label 은 MediaPipe 가 준 'Left'/'Right' */
 export function isPalmFacing(lm, label) {
   const cross = (lm[5].x - lm[0].x) * (lm[17].y - lm[0].y) - (lm[5].y - lm[0].y) * (lm[17].x - lm[0].x);

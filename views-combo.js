@@ -4,6 +4,7 @@
 import { ELEMENTS, STEMS, BRANCHES } from './saju.js';
 import { FORTUNE_KEYS, FORTUNE_NAMES, relation } from './fusion.js';
 import { wrapLines, roundRect, $, clampN, esc } from './util.js';
+import { compareHands } from './palm-reading.js';
 import { SRC_COLOR, mountChart, createOrrery, drawRadar, drawFlow, drawElementMap, renderRadarImage } from './charts.js';
 
 const ICON = { wealth: '🪙', love: '💞', career: '🏛️', health: '🌿', social: '🤝' };
@@ -192,8 +193,9 @@ export function drawPalmOverlay(canvas, src, palm) {
   }
 }
 
-export function renderPalm(palm, srcCanvas) {
+export function renderPalm(palm, srcCanvas, palms = null) {
   const { analysis: a, reading: r } = palm;
+  renderPalmSide(palm, palms);
   drawPalmOverlay($('#palm-photo'), srcCanvas, palm);
   $('#palm-legend').innerHTML = ['heart', 'head', 'life', 'fate'].filter(k => a.lines[k]).map(k => `<span style="--c:${LINE_COLOR[k]}"><i></i>${LINE_NAME[k]}</span>`).join('');
   const iss = a.quality.issues;
@@ -221,6 +223,35 @@ export function renderPalm(palm, srcCanvas) {
   }).join('');
   renderPalmCharts(r);
   animate('#view-palm');
+}
+
+/** 왼손·오른손 표시, 두 손 전환 탭, 두 손 비교 */
+function renderPalmSide(palm, palms) {
+  const S = palm.reading.sideInfo;
+  $('#palm-side').innerHTML = `<b>${S.name}</b> · ${S.role} <small>(${S.kind})</small>`;
+  const both = !!(palms && palms.left && palms.right);
+  const tabs = $('#palm-tabs');
+  tabs.classList.toggle('hidden', !both);
+  tabs.innerHTML = both ? ['left', 'right'].map(k => `<button type="button" role="tab" data-side="${k}" aria-selected="${palm.side === k}" class="${palm.side === k ? 'on' : ''}">${k === 'left' ? '왼손 · 타고난 바탕' : '오른손 · 지금의 모습'}</button>`).join('') : '';
+  const cmp = $('#palm-compare');
+  if (!both) {
+    const other = palm.side === 'left' ? '오른손' : '왼손';
+    cmp.innerHTML = `<p class="note">${other}도 촬영하면 타고난 바탕(왼손)과 살아오며 가꾼 모습(오른손)을 비교해 드립니다. 처음으로 돌아가 「다시 촬영」으로 ${other}을 찍어 보세요.</p>`;
+    return;
+  }
+  const C = compareHands(palms.left, palms.right);
+  const row = (x) => {
+    const pos = (v) => (v == null ? null : clampN((v - 40) / 60 * 100, 0, 100));
+    const a = pos(x.left), b = pos(x.right);
+    const lo = Math.min(a ?? b, b ?? a), hi = Math.max(a ?? b, b ?? a);
+    const tag = x.delta == null ? '' : x.delta > 0 ? `<span class="up">+${x.delta}</span>` : x.delta < 0 ? `<span class="down">${x.delta}</span>` : '<span>±0</span>';
+    return `<div class="cmp"><div class="cmp-head"><b>${x.name}</b><span>왼 ${x.left ?? '-'} → 오 ${x.right ?? '-'} ${tag}</span></div>
+      <div class="cmp-track">${a != null && b != null ? `<em style="left:${lo}%;width:${hi - lo}%"></em>` : ''}${a != null ? `<i class="l" style="left:${a}%"></i>` : ''}${b != null ? `<i class="r" style="left:${b}%"></i>` : ''}</div>
+      <p>${esc(x.text)}</p></div>`;
+  };
+  cmp.innerHTML = `<div class="cmp-legend"><span><i class="l"></i>왼손(타고난)</span><span><i class="r"></i>오른손(지금)</span></div>`
+    + `<div class="cmp-grid">${C.rows.map(row).join('')}</div><h4 class="cmp-sub">선별 비교</h4><div class="cmp-grid">${C.lineRows.map(row).join('')}</div>`
+    + C.summary.map(t => `<p class="cmp-sum">${esc(t)}</p>`).join('');
 }
 
 // ── 종합 ─────────────────────────────────────────────────────
