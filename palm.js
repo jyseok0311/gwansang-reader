@@ -352,8 +352,13 @@ export function measureLines(warp, lines, ridgeN, mask) {
     const strength = partVals.reduce((s, v) => s + v, 0) / partVals.length;
     const contrast = strength / Math.max(bgMedian, 0.05);
     const cont = partVals.filter(v => v >= sp.thr * 0.7).length / partVals.length;
+    // 끊김 횟수(뚜렷한 구간 안에서 세 칸 넘게 흐려진 곳)와 곧은 정도(양 끝 직선거리 ÷ 선 길이)
+    let breaks = 0, run = 0;
+    for (let i = sp.from; i <= sp.to; i++) { if (sp.sm[i] < sp.thr) run++; else { if (run >= 3) breaks++; run = 0; } }
+    const chord = part.length > 1 ? Math.hypot(part[part.length - 1].x - part[0].x, part[part.length - 1].y - part[0].y) : 0;
+    const straight = chord / Math.max(1, pathLen(part));
     const m = { key, name: LINE_PRIORS[key].name, hanja: LINE_PRIORS[key].hanja,
-      lengthW: lenW, lengthRel: lenW / expected, strength, contrast, continuity: cont,
+      lengthW: lenW, lengthRel: lenW / expected, strength, contrast, continuity: cont, breaks, straight,
       coverage: part.length / l.path.length, start: palmPts[0], end: palmPts[palmPts.length - 1], bulge: bulge(palmPts, rho) };
     out[key] = { ...l, part, palmPts, m, sp };
   }
@@ -373,7 +378,26 @@ export function handShape(lm) {
   const d = (i, j) => dist(lm[i], lm[j]);
   const f = palmFrame(lm);
   const angle = (i, j) => Math.atan2(lm[j].y - lm[i].y, lm[j].x - lm[i].x);
-  let spread = Math.abs(angle(5, 8) - angle(17, 20)) * 180 / Math.PI; if (spread > 180) spread = 360 - spread;
+  const angBetween = (a0, a1, b0, b1) => { let x = Math.abs(angle(a0, a1) - angle(b0, b1)) * 180 / Math.PI; if (x > 180) x = 360 - x; return x; };
+  const spread = angBetween(5, 8, 17, 20);
+  const palmLen = d(0, 9);
+  // 손가락별 길이(손바닥 길이에 대한 비) — 검지·중지·약지·새끼. 각각 목성·토성·태양·수성 손가락
+  const fl = { index: d(5, 8) / palmLen, middle: d(9, 12) / palmLen, ring: d(13, 16) / palmLen, pinky: d(17, 20) / palmLen };
+  // 마디 비율: 손끝 마디(의지·정신) · 가운데 마디(이성) · 뿌리 마디(현실·물질). 네 손가락 평균
+  const phal = [0, 0, 0];
+  for (const base of [5, 9, 13, 17]) {
+    const seg = [d(base + 2, base + 3), d(base + 1, base + 2), d(base, base + 1)];   // 끝 → 뿌리
+    const sum = seg[0] + seg[1] + seg[2];
+    for (let k = 0; k < 3; k++) phal[k] += seg[k] / sum / 4;
+  }
+  // 새끼손가락 끝이 약지 끝 마디 이음새(15번)보다 얼마나 위/아래인지 (손바닥 길이 단위, +면 높이 닿음)
+  const P = (i) => imageToPalm(f, lm[i]);
+  const pinkyReach = P(15).b - P(20).b;
+  // 엄지가 검지에서 벌어진 각도, 엄지 끝이 올라간 높이(손바닥 길이 단위, 0 = 중지 뿌리 높이)
+  const thumbOpen = angBetween(1, 4, 5, 8);
+  const thumbTipB = P(4).b;
+  // 인접 손가락 사이 벌어짐(도)
+  const gapIM = angBetween(5, 8, 9, 12), gapMR = angBetween(9, 12, 13, 16), gapRP = angBetween(13, 16, 17, 20);
   return {
     palmRatio: f.rho,
     fingerRatio: d(9, 12) / d(0, 9),
@@ -381,6 +405,11 @@ export function handShape(lm) {
     indexRing: d(5, 8) / d(13, 16),
     spread,
     palmWidthPx: f.W,
+    fingerLen: fl,
+    pinkyRing: fl.pinky / fl.ring,
+    middleIndex: fl.middle / fl.index,
+    phalanx: { tip: phal[0], mid: phal[1], base: phal[2] },
+    pinkyReach, thumbOpen, thumbTipB, gapIM, gapMR, gapRP,
   };
 }
 

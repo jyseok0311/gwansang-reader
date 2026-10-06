@@ -46,6 +46,8 @@ const overlay = $('#overlay');
 const camStage = $('#cam-stage');
 const camLayer = $('#cam-layer');
 const ovalEl = $('#oval');
+const handGuide = $('#hand-guide');
+const handPick = $('#hand-pick');
 const camControls = $('.cam-controls');
 const snapshot = $('#snapshot');
 const statusEl = $('#status');
@@ -64,6 +66,9 @@ const engine = { mod: null, vision: null, source: null, delegate: null, landmark
 // 종합 분석: 관상(face)·손금(palm)·사주(saju) 결과와 합친 결과(fused)
 const combo = { face: null, palm: null, saju: null, fused: null };
 let captureKind = 'face';   // 지금 카메라로 찍는 것: 'face' | 'palm'
+let handSide = 'right';     // 손금 촬영 때 안내선에 그릴 손: 'right' | 'left' (고른 값은 기억한다)
+try { if (localStorage.getItem('gwansang.hand') === 'left') handSide = 'left'; } catch { /* 무시 */ }
+const handName = () => (handSide === 'left' ? '왼손' : '오른손');
 let palmStable = { x: 0, y: 0, t: 0 };
 let stream = null;
 let facing = 'user';
@@ -320,6 +325,7 @@ function layoutCamera() {
   const cx = (visL + visR) / 2, cy = (availT + availB) / 2;
   Object.assign(ovalEl.style, { width: `${ow}px`, height: `${oh}px`, left: `${cx - ow / 2}px`, top: `${cy - oh / 2}px`, transform: 'none', aspectRatio: 'auto' });
   Object.assign(geo, { s, left, top, vw, vh, sw, sh, oval: { cx, cy, w: ow, h: oh } });
+  layoutHandGuide({ cx, cy, oh, availT, availB, sw });
   debugInfo();
 }
 const DEBUG = new URLSearchParams(location.search).has('debug');
@@ -329,6 +335,20 @@ function debugInfo() {
   if (!el) { el = document.createElement('pre'); el.id = 'cam-debug'; el.style.cssText = 'position:absolute;left:8px;bottom:190px;z-index:9;margin:0;padding:6px 8px;font:11px/1.35 monospace;color:#9f9;background:rgba(0,0,0,.7);border-radius:6px;pointer-events:none;white-space:pre'; camStage.appendChild(el); }
   const vv = window.visualViewport;
   el.textContent = `feed ${video.videoWidth}x${video.videoHeight} ${feedPortrait() ? 'portrait' : 'landscape'}\nscreen ${innerWidth}x${innerHeight} vv ${vv ? Math.round(vv.width) + 'x' + Math.round(vv.height) + ' s' + vv.scale.toFixed(2) : '-'}\nstage ${camStage.clientWidth}x${camStage.clientHeight} scale ${geo.s.toFixed(3)} mode ${streamMode.p}/${streamMode.l} mirror ${geo.mirrored ? 1 : 0}`;
+}
+/** 손금 촬영 때만 보이는 손 모양 안내선. 틀(타원)보다 조금 크게 그려 손바닥이 충분히 크게 찍히게 한다. */
+function layoutHandGuide({ cx, cy, oh, availT, availB, sw }) {
+  const palm = captureKind === 'palm';
+  handGuide.classList.toggle('hidden', !palm);
+  handPick.classList.toggle('hidden', !palm);
+  if (!palm) return;
+  const ASPECT = 200 / 280;
+  const h = Math.max(40, Math.min(oh * 1.2, availB - availT, sw * 0.92 / ASPECT)), w = h * ASPECT;
+  const top = clamp(cy - h / 2, availT, Math.max(availT, availB - h));
+  Object.assign(handGuide.style, { left: `${cx - w / 2}px`, top: `${top}px`, width: `${w}px`, height: `${h}px` });
+  // 손바닥을 카메라 쪽으로 보였을 때 엄지는 오른손이면 화면 오른쪽, 왼손이면 왼쪽. 앞 카메라는 미리보기가 거울이라 반대가 된다.
+  handGuide.classList.toggle('flip', (handSide === 'right') === geo.mirrored);
+  handPick.firstChild.textContent = `✋ ${handName()} `;
 }
 function relayoutCamera() { if (current === 'camera') syncViewport(); if (current === 'camera' && stream) layoutCamera(); }
 const safeTop = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--safe-t')) || 0;
@@ -374,6 +394,8 @@ async function openCamera() {
   const token = ++camToken;
   views.camera.classList.toggle('palm', palm);
   $('#cam-kind').textContent = palm ? '손금 촬영' : '관상 촬영';
+  handGuide.classList.toggle('hidden', !palm);
+  handPick.classList.toggle('hidden', !palm);
   btnCapture.disabled = true;
   resetHold();
   const ready = palm ? engine.hand : engine.landmarker;
@@ -382,7 +404,7 @@ async function openCamera() {
     await Promise.all([startStream(), palm ? loadHand() : loadEngine()]);
     if (token !== camToken || current !== 'camera') { stopCamera(); return; }
     if (palm) await setHandMode('VIDEO'); else await setMode('VIDEO');
-    setLive('', palm ? '손가락을 펴고 손바닥을 틀 안에 맞춰 주세요.' : '타원 안에 얼굴을 맞춰 주세요.');
+    setLive('', palm ? `${handName()} 손가락을 펴고 손바닥을 안내선에 맞춰 주세요.` : '타원 안에 얼굴을 맞춰 주세요.');
     layoutCamera();
     keepAwake(true);
     lastVideoTime = -1;
@@ -1287,6 +1309,12 @@ btnSwitch.addEventListener('click', async () => {
     facing = prev; showToast('카메라를 전환할 수 없습니다.');
     try { await startStream(); } catch { /* 무시 */ }
   }
+});
+handPick.addEventListener('click', () => {
+  handSide = handSide === 'right' ? 'left' : 'right';
+  try { localStorage.setItem('gwansang.hand', handSide); } catch { /* 무시 */ }
+  layoutCamera();
+  setLive('', `${handName()} 손가락을 펴고 손바닥을 안내선에 맞춰 주세요.`);
 });
 $('#btn-cancel').addEventListener('click', () => { stopCamera(); history.back(); });
 btnCapture.addEventListener('click', captureFromVideo);

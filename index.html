@@ -119,6 +119,8 @@
           <canvas id="overlay" aria-hidden="true"></canvas>
         </div>
         <div id="oval" class="oval" aria-hidden="true"></div>
+        <svg id="hand-guide" class="hand-guide hidden" viewBox="0 0 200 280" aria-hidden="true"><path d="M72 278 L72 246 C54 234 45 212 45 182 L45 100 A10.5 10.5 0 0 1 66 100 L66 150 L69 150 L69 64 A11 11 0 0 1 91 64 L91 146 L94 146 L94 44 A12 12 0 0 1 118 44 L118 146 L121 146 L121 68 A11 11 0 0 1 143 68 L143 150 L156 168 L172 130 A10 10 0 0 1 190 140 L162 214 C160 236 148 246 134 252 L128 278 Z"/><path class="crease" d="M58 168 C80 176 104 172 128 160"/><path class="crease" d="M60 196 C80 204 100 204 118 198"/></svg>
+        <button id="hand-pick" class="hand-pick hidden" type="button" aria-label="촬영할 손 바꾸기">✋ 오른손 <small>바꾸기</small></button>
         <div id="status" class="status" role="status" aria-live="polite">카메라를 준비하는 중…</div>
         <div id="flash" class="flash" aria-hidden="true"></div>
       </div>
@@ -337,11 +339,20 @@
         <div class="chart-card"><h4>인생 영역별 운세</h4><canvas id="palm-radar" class="chart radar" role="img"></canvas></div>
       </div>
 
+      <h3 class="sec"><span>特徵</span>가장 두드러진 특징</h3>
+      <div id="palm-standout" class="standout"></div>
+
       <h3 class="sec"><span>主線</span>선별 풀이</h3>
       <div id="palm-readings" class="parts"></div>
 
+      <h3 class="sec"><span>手形</span>손 모양 풀이</h3>
+      <div id="palm-traits" class="traits"></div>
+
       <h3 class="sec"><span>五運</span>손금으로 본 다섯 가지 운</h3>
       <div id="palm-fortunes" class="fortunes"></div>
+
+      <h3 class="sec"><span>總評</span>손금 총평</h3>
+      <div id="palm-summary" class="summary"></div>
 
       <p class="disclaimer">※ 손금 선은 사진의 밝기·초점·손의 각도에 따라 부정확하게 찾아질 수 있습니다. 오락용 참고 결과입니다.</p>
       <div class="back-combo hidden" data-back-combo><button class="ghost" type="button" data-goto="combo">↩ 종합 결과로 돌아가기</button></div>

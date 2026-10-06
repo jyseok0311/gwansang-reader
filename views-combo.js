@@ -210,7 +210,10 @@ export function renderPalm(palm, srcCanvas) {
   $('#palm-readings').innerHTML = r.readings.map((x, i) => `
     <details class="part"${i === 0 ? ' open' : ''}>
       <summary><span class="p-name">${x.name}<small>${x.hanja} · ${x.topic}</small></span><span class="p-label">${x.headline}</span><span class="p-badge ${x.faint ? 'faint' : 'top'}">${x.clarity}</span></summary>
-      <p>${esc(x.text)}</p></details>`).join('');
+      <p>${esc(x.text)}</p><p class="metrics">${esc(x.metrics || '')}</p></details>`).join('');
+  $('#palm-standout').innerHTML = r.standout.map(x => `<div class="standout-item"><div class="so-head"><b>${esc(x.title)}</b><span>${esc(x.from)}</span></div><p>${esc(x.text)}</p></div>`).join('');
+  $('#palm-traits').innerHTML = r.traits.map(t => `<div class="trait"><div class="trait-head"><b>${esc(t.title)}</b><span class="dots" role="img" aria-label="5단계 중 ${t.tier + 1}단계">${[0, 1, 2, 3, 4].map(i => `<i class="${i === t.tier ? 'on' : ''}"></i>`).join('')}</span></div><p>${esc(t.text)}</p></div>`).join('');
+  $('#palm-summary').innerHTML = r.summary.map(t => `<p>${esc(t)}</p>`).join('');
   $('#palm-fortunes').innerHTML = FORTUNE_KEYS.map((k) => {
     const sc = r.fortunes[k];
     return `<div class="fortune"><div class="f-head"><span class="f-icon" aria-hidden="true">${ICON[k]}</span><b>${FORTUNE_NAMES[k]}</b><span class="f-level ${sc >= 88 ? 'top' : ''}">${LEVEL(sc)}</span><span class="f-score">${sc}</span></div>
