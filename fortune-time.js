@@ -5,7 +5,7 @@
 //  - 12운성(그날의 기운 세기), 지지의 합·충으로 영역별 점수를 조정한다. 같은 날엔 같은 결과가 나온다(무작위 없음).
 //  - 별자리는 태어난 순간의 태양 황경으로 정하고, 오늘의 달 위치(저정밀 달 황경 계산)와의 각도로 오늘의 흐름을 읽는다.
 // ─────────────────────────────────────────────────────────────
-import { STEMS, BRANCHES, EL, ANIMAL_TEXT, ELEMENT_GEN as GEN, ELEMENT_CTRL as CTRL, computeSaju, sunLongitude, jdn } from './saju.js';
+import { STEMS, BRANCHES, EL, ANIMAL_TEXT, ELEMENT_GEN as GEN, ELEMENT_CTRL as CTRL, computeSaju, sunLongitude } from './saju.js';
 import { clamp } from './util.js';
 
 export const AREA_KEYS = ['wealth', 'love', 'career', 'health', 'social'];
