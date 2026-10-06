@@ -5,6 +5,7 @@ import { ELEMENTS, STEMS, BRANCHES } from './saju.js';
 import { FORTUNE_KEYS, FORTUNE_NAMES, relation } from './fusion.js';
 import { wrapLines, roundRect, $, clampN, esc } from './util.js';
 import { compareHands } from './palm-reading.js';
+import { josa } from './physiognomy.js';
 import { SRC_COLOR, mountChart, createOrrery, drawRadar, drawFlow, drawElementMap, renderRadarImage } from './charts.js';
 
 const ICON = { wealth: '🪙', love: '💞', career: '🏛️', health: '🌿', social: '🤝' };
@@ -139,7 +140,7 @@ export function renderSaju(state) {
   $('#saju-fortunes').innerHTML = FORTUNE_KEYS.map((k) => {
     const sc = r.fortunes[k];
     return `<div class="fortune"><div class="f-head"><span class="f-icon" aria-hidden="true">${ICON[k]}</span><b>${FORTUNE_NAMES[k]}</b><span class="f-level ${sc >= 88 ? 'top' : ''}">${LEVEL(sc)}</span><span class="f-score">${sc}</span></div>
-      <div class="meter gold"><i data-w="${sc}%" style="--w:0%"></i></div><p>${FORTUNE_BASIS[k]}을(를) 기준으로 계산한 점수입니다.</p></div>`;
+      <div class="meter gold"><i data-w="${sc}%" style="--w:0%"></i></div><p>${josa(FORTUNE_BASIS[k], '을', '를')} 기준으로 계산한 점수입니다.</p></div>`;
   }).join('');
   renderSajuCharts(r);
   animate('#view-saju');

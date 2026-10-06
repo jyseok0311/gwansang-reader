@@ -448,7 +448,8 @@ export function analyzeFortunes(f, samjeong) {
 export function josa(word, withBatchim, without) {
   const base = word.replace(/\s*\([^)]*\)$/, '');   // '불(火)' 처럼 괄호로 끝나면 괄호 앞 글자로 판단
   const ch = base.charCodeAt(base.length - 1);
-  const has = ch >= 0xAC00 && ch <= 0xD7A3 && (ch - 0xAC00) % 28 !== 0;
+  const jong = ch >= 0xAC00 && ch <= 0xD7A3 ? (ch - 0xAC00) % 28 : 0;
+  const has = jong !== 0 && !(withBatchim === '으로' && jong === 8);   // 'ㄹ' 받침은 '으로' 가 아니라 '로' (물로, 불로)
   return word + (has ? withBatchim : without);
 }
 /** 표준정규분포 누적확률 (근사) */

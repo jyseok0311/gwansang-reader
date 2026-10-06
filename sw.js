@@ -1,7 +1,7 @@
 // 운명 판독기 서비스 워커
 // - 앱 파일: 네트워크 우선 (수정 사항이 바로 반영되고, 오프라인이면 캐시 사용)
 // - vendor/ 엔진·모델, 아이콘, 웹폰트: 캐시 우선 (용량이 커서 한 번만 내려받음)
-const VERSION = 'v15';
+const VERSION = 'v16';
 const APP_CACHE = `gwansang-app-${VERSION}`;
 const ASSET_CACHE = 'gwansang-assets-mp0.10.14';   // 엔진·모델은 MediaPipe 버전이 바뀔 때만 새로 받음
 const APP_SHELL = ['./', 'index.html', 'style.css', 'app.js', 'util.js', 'measure.js', 'perspective.js', 'physiognomy.js', 'saju.js', 'palm.js', 'palm-reading.js', 'fusion.js', 'views-combo.js', 'embers.js', 'charts.js', 'manifest.webmanifest', 'icons/icon-192.png'];
@@ -14,12 +14,14 @@ self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
     const keep = new Set([APP_CACHE, ASSET_CACHE]);
     for (const k of await caches.keys()) if (!keep.has(k)) await caches.delete(k);
+    // 예전에는 아이콘도 '엔진·모델' 캐시에 들어 있어 새 아이콘으로 바뀌지 않았다. 옛 아이콘만 골라 지운다.
+    try { const c = await caches.open(ASSET_CACHE); for (const r of await c.keys()) if (new URL(r.url).pathname.includes('/icons/')) await c.delete(r); } catch { /* 무시 */ }
     await self.clients.claim();
   })());
 });
 
 function isAsset(url) {
-  return url.pathname.includes('/vendor/') || url.pathname.includes('/icons/')
+  return url.pathname.includes('/vendor/')
     || url.host === 'fonts.googleapis.com' || url.host === 'fonts.gstatic.com';
 }
 

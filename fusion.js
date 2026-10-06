@@ -130,7 +130,7 @@ function compose(c) {
       const desc = fills.map(f => `${SOURCE_NAME[f.by]}의 ${el(f.el).name}(${el(f.el).hanja}${f.main ? ', 주된 기질' : ''})`);
       parts.push(`다행히 ${desc.join(', ')} 기운이 사주의 빈자리를 채워 줍니다.`);
     }
-    if (s.lack.length && !fills.length) parts.push(`${s.lack.map(e => el(e).lucky).slice(0, 2).join(', ')}을(를) 가까이하면 부족한 기운을 채우는 데 도움이 됩니다.`);
+    if (s.lack.length && !fills.length) parts.push(`${josa(s.lack.map(e => el(e).lucky).slice(0, 2).join(', '), '을', '를')} 가까이하면 부족한 기운을 채우는 데 도움이 됩니다.`);
     for (const o of overs) parts.push(`한편 ${SOURCE_NAME[o.by]}의 ${el(o.el).name} 기운이 사주의 많은 ${el(o.el).name} 기운과 겹쳐 그 성향이 다소 지나칠 수 있으니 절제가 필요합니다.`);
     parts.push(s.texts.strength);
     P.push(parts.join(' '));

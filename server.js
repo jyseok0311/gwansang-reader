@@ -105,7 +105,10 @@ function handler(req, res) {
       'X-Content-Type-Options': 'nosniff',
     });
     if (req.method === 'HEAD') return res.end();
-    fs.createReadStream(file).pipe(res);
+    const stream = fs.createReadStream(file);
+    stream.on('error', () => res.destroy());   // 읽는 도중 파일이 사라지거나 잠기면 연결만 끊고 서버는 계속 돈다
+    res.on('close', () => stream.destroy());   // 받는 쪽이 먼저 끊어도 파일을 놓아 준다
+    stream.pipe(res);
   });
 }
 

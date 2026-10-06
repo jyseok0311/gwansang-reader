@@ -678,9 +678,12 @@ async function drawFileToSnapshot(file) {
   }
 }
 
+let analysisBusy = false;   // 분석 중에 사진을 또 올리면 공유 캔버스(snapshot)가 섞이므로 막는다
 async function handleFile(file) {
   if (!file) return;
+  if (analysisBusy || capturing) { showToast('분석이 진행 중입니다. 끝난 뒤에 다시 올려 주세요.'); return; }
   if (file.type && !file.type.startsWith('image/')) { showToast('이미지 파일만 분석할 수 있습니다.'); return; }
+  analysisBusy = true;
   try {
     const exif = await readExif(file);
     await drawFileToSnapshot(file);
@@ -696,7 +699,7 @@ async function handleFile(file) {
   } catch (e) {
     showToast(e.message || String(e), 4000);
     backToHub();
-  }
+  } finally { analysisBusy = false; }
 }
 
 function detectImage() {
@@ -1144,14 +1147,16 @@ async function analyzePalmSnapshot({ history: histMode = 'push' } = {}) {
 
 async function handlePalmFile(file) {
   if (!file) return;
+  if (analysisBusy || capturing) { showToast('분석이 진행 중입니다. 끝난 뒤에 다시 올려 주세요.'); return; }
   if (file.type && !file.type.startsWith('image/')) { showToast('이미지 파일만 분석할 수 있습니다.'); return; }
+  analysisBusy = true;
   try {
     await drawFileToSnapshot(file);
     await analyzePalmSnapshot({ history: current === 'hub' ? 'push' : 'replace' });
   } catch (e) {
     showToast(e.message || String(e), 4000);
     backToHub();
-  }
+  } finally { analysisBusy = false; }
 }
 
 // ── 종합 분석 (허브 · 사주 입력 · 종합 결과) ────────────────

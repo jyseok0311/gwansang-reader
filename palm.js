@@ -234,8 +234,11 @@ function traceLine(warp, prior, ridgeN, mask, avoid, opts = {}) {
   const stepCost = (i) => (1 / (0.06 + ridgeN[i])) * (1 + 0.8 * prox[i]) + (avoid ? avoid[i] : 0);
   for (const i of S) { dist[i] = stepCost(i); heap.push(dist[i], i); }
   let goal = -1;
+  const closed = new Uint8Array(nx * ny);
   while (heap.size) {
     const i = heap.pop();
+    if (closed[i]) continue;   // 더 싼 길로 이미 처리한 칸 (예전 항목)
+    closed[i] = 1;
     if (E.has(i)) { goal = i; break; }
     const x = i % nx, y = (i / nx) | 0, di = dist[i];
     for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
