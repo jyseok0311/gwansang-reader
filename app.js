@@ -9,6 +9,7 @@ import { computeSaju, interpretSaju } from './saju.js';
 import { isPalmFacing, handSide as detectHandSide } from './palm.js';
 import { analyzePalmOffThread } from './palm-runner.js';
 import { interpretPalm } from './palm-reading.js';
+import { FACE_TOUR, tourAt, regionBoxes } from './face-guide.js';
 import { fuse } from './fusion.js';
 import * as V from './views-combo.js';
 import * as X from './views-extra.js';
@@ -82,8 +83,68 @@ let captureKind = 'face';   // 지금 카메라로 찍는 것: 'face' | 'palm'
 let handSide = 'right';     // 손금 촬영 때 안내선에 그릴 손: 'right' | 'left' (고른 값은 기억한다)
 try { if (localStorage.getItem('gwansang.hand') === 'left') handSide = 'left'; } catch { /* 무시 */ }
 const handName = () => (handSide === 'left' ? '왼손' : '오른손');
-let bothHands = true;       // 손금 촬영: 왼손·오른손을 한 장에 같이 찍기 (기본). 끄면 한 손씩
-try { if (localStorage.getItem('gwansang.hands') === 'one') bothHands = false; } catch { /* 무시 */ }
+// 손금 촬영 방식: 'seq' 선천(왼손) → 후천(오른손) 차례로 (기본) · 'both' 두 손을 한 장에 · 'one' 한 손만
+let handMode = 'seq';
+try { const m = localStorage.getItem('gwansang.hands'); if (m === 'one' || m === 'both' || m === 'seq') handMode = m; } catch { /* 무시 */ }
+let seqStep = 0;            // 'seq' 방식에서 지금 찍는 차례: 0 = 왼손(선천), 1 = 오른손(후천)
+const seqSide = () => (seqStep === 0 ? 'left' : 'right');
+const isBoth = () => handMode === 'both';
+const handWhy = $('#hand-why'), hwBadge = $('#hw-badge'), hwText = $('#hw-text');
+const faceWhy = $('#face-why'), fwBadge = $('#fw-badge'), fwText = $('#fw-text'), fwDots = $('#fw-dots');
+// 관상 촬영: 얼굴이 알맞게 잡혀 있는 동안 부위마다 의미를 하나씩 짚어 주고, 다 읽으면 촬영한다 (face-guide.js)
+const tour = { ms: 0, last: 0, lost: 0 };
+const resetTour = () => { tour.ms = 0; tour.last = 0; tour.lost = 0; };
+const NUM = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧'];
+/** 관상 안내 카드: 얼굴이 아직 안 잡혔으면 사용법, 잡혔으면 지금 짚는 부위의 이름과 뜻 */
+function updateFaceWhy(state) {
+  let badge, text, dots = '';
+  const at = tourAt(tour.ms);
+  if (state === 'noface') {
+    badge = '얼굴을 인식하면 부위별 뜻을 알려 드려요';
+    text = '타원 안에 얼굴을 맞추면 이마부터 턱까지 부위마다 어떤 운을 뜻하는지 차례로 짚어 드립니다. 다 읽는 동안 가만히 계세요.';
+  } else if (tour.ms === 0 && state !== 'ok') {
+    badge = '얼굴을 인식했어요 · 자세를 맞춰 주세요';
+    text = '정면을 보고 무표정으로 맞추면 이마부터 턱까지 부위마다 어떤 운을 뜻하는지 차례로 짚어 드립니다.';
+  } else if (at.index < 0) {
+    badge = '✔ 부위를 모두 읽었어요';
+    text = autoToggle.checked && !at.done ? '이제 곧 촬영합니다. 그대로 가만히 계세요.' : '이제 촬영 버튼을 눌러 주세요. 읽은 부위가 실제 얼굴에서 어떻게 나왔는지 풀이해 드립니다.';
+  } else {
+    const s = FACE_TOUR[at.index];
+    badge = `${NUM[at.index]} ${s.name} · ${s.topic}`;
+    text = s.text;
+  }
+  dots = FACE_TOUR.map((_, i) => (at.index < 0 || i < at.index ? '●' : i === at.index ? '◉' : '○')).join('');
+  if (fwBadge.textContent !== badge) fwBadge.textContent = badge;
+  if (fwText.textContent !== text) fwText.textContent = text;
+  if (fwDots.textContent !== dots) fwDots.textContent = dots;
+}
+/** 지금 짚는 부위를 얼굴 위에 빛나게 표시 (미리보기가 거울이어도 캔버스가 같이 뒤집히므로 글자는 캔버스에 쓰지 않는다) */
+function drawTourRegion(ctx, pts, now) {
+  const i = tourAt(tour.ms).index;
+  if (i < 0) return;
+  const pulse = 0.5 + 0.5 * Math.sin(now / 220);
+  ctx.save();
+  ctx.lineWidth = Math.max(2, ctx.canvas.width / 260);
+  ctx.strokeStyle = `rgba(255,208,138,${0.7 + 0.3 * pulse})`;
+  ctx.fillStyle = `rgba(255,178,77,${0.1 + 0.1 * pulse})`;
+  ctx.shadowColor = 'rgba(255,178,77,.9)'; ctx.shadowBlur = 10 + 10 * pulse;
+  for (const b of regionBoxes(FACE_TOUR[i], pts)) { roundRect(ctx, b.x, b.y, b.w, b.h, Math.min(b.w, b.h) * 0.3); ctx.fill(); ctx.stroke(); }
+  ctx.restore();
+}
+const HAND_WHY = {
+  left: ['왼손 · 선천(타고난 바탕)', '왼손은 태어날 때부터 지닌 기질과 바탕(선천운)을 보여 줍니다. 그래서 타고난 모습부터 먼저 읽어요.'],
+  right: ['오른손 · 후천(지금의 모습)', '오른손은 살아오며 노력으로 다듬은 모습과 지금의 흐름(후천운)을 보여 줍니다. 왼손과 견주면 타고난 것에서 달라진 점이 보여요.'],
+  both: ['두 손 함께 · 선천과 후천', '왼손은 선천(타고난 바탕), 오른손은 후천(살아오며 다듬은 모습과 지금의 흐름)을 보여 줍니다. 두 손을 견주어 읽어요.'],
+};
+/** 지금 찍는 손(들)에 대한 설명 카드 — 왜 이 손을 찍는지 알려 준다 */
+function updateHandWhy() {
+  let badge, text;
+  if (handMode === 'seq') { const w = HAND_WHY[seqSide()]; badge = `${seqStep + 1}/2 · ${w[0]}`; text = w[1]; }
+  else if (handMode === 'both') [badge, text] = HAND_WHY.both;
+  else [badge, text] = HAND_WHY[handSide];
+  if (hwBadge.textContent !== badge) hwBadge.textContent = badge;
+  if (hwText.textContent !== text) hwText.textContent = text;
+}
 const palmStable = new Map();   // 손 자리별 직전 위치 (움직임 감지용)
 const PALM_MAX_SIDE = 1920;   // 손금 사진은 두 손이 한 장에 들어가므로 얼굴보다 크게 보관한다
 let stream = null;
@@ -335,6 +396,15 @@ function layoutCamera() {
   const statusR = statusEl.getBoundingClientRect();
   // 안내 문구는 한 줄일 때도 두 줄일 때도 있으므로 실제 높이와 두 줄 높이 중 큰 쪽을 비워 둔다
   if (statusR.height && statusR.top - stageR.top < sh / 3) availT = Math.max(availT, statusR.bottom - stageR.top + 8, 70 + safeTop());
+  {
+    const palm = captureKind === 'palm', card = palm ? handWhy : faceWhy;
+    handWhy.classList.toggle('hidden', !palm); faceWhy.classList.toggle('hidden', palm);
+    if (palm) updateHandWhy(); else if (!tour.ms) updateFaceWhy('noface');
+    const kindR = $('#cam-kind').getBoundingClientRect(), statusAtTop = statusR.height && statusR.top - stageR.top < sh / 3;
+    const topEdge = Math.max(kindR.bottom, statusAtTop ? statusR.bottom : 0) - stageR.top + 8;
+    card.style.top = `${topEdge}px`;
+    availT = Math.max(availT, topEdge + card.getBoundingClientRect().height + 8);
+  }
   const ctrlR = camControls.getBoundingClientRect();
   const ctrlOverlaps = ctrlR.top < stageR.bottom - 1 && ctrlR.bottom > stageR.top && ctrlR.left < stageR.right - 1 && ctrlR.right > stageR.left + 1;
   if (ctrlOverlaps) availB = Math.min(availB, ctrlR.top - stageR.top - 8);
@@ -358,22 +428,23 @@ function debugInfo() {
 function layoutHandGuide({ cx, cy, oh, availT, availB, sw }) {
   const palm = captureKind === 'palm';
   handGuide.classList.toggle('hidden', !palm);
-  handGuide2.classList.toggle('hidden', !palm || !bothHands);
-  handPick.classList.toggle('hidden', !palm || bothHands);
+  handGuide2.classList.toggle('hidden', !palm || !isBoth());
+  handPick.classList.toggle('hidden', !palm || handMode !== 'one');
   handModeBtn.classList.toggle('hidden', !palm);
   geo.hands = [];
   if (!palm) return;
-  handModeBtn.firstChild.textContent = bothHands ? '🙌 두 손 함께 ' : '✋ 한 손만 ';
+  handModeBtn.firstChild.textContent = { seq: '👣 차례로 ', both: '🙌 두 손 함께 ', one: '✋ 한 손만 ' }[handMode];
   const ASPECT = 200 / 280;
   // 손바닥을 카메라 쪽으로 보였을 때 엄지는 오른손이면 화면 오른쪽, 왼손이면 왼쪽. 앞 카메라는 미리보기가 거울이라 반대가 된다.
   const flipFor = (side) => (side === 'right') === geo.mirrored;
-  if (!bothHands) {
+  if (!isBoth()) {
+    const side = handMode === 'seq' ? seqSide() : handSide;
     const h = Math.max(40, Math.min(oh * 1.2, availB - availT, sw * 0.92 / ASPECT)), w = h * ASPECT;
     const top = clamp(cy - h / 2, availT, Math.max(availT, availB - h));
     Object.assign(handGuide.style, { left: `${cx - w / 2}px`, top: `${top}px`, width: `${w}px`, height: `${h}px` });
-    handGuide.classList.toggle('flip', flipFor(handSide));
+    handGuide.classList.toggle('flip', flipFor(side));
     handPick.firstChild.textContent = `✋ ${handName()} `;
-    geo.hands = [{ cx, cy: top + h / 2, w, h, side: handSide }];
+    geo.hands = [{ cx, cy: top + h / 2, w, h, side }];
     return;
   }
   // 두 손: 보이는 영역을 좌우로 나눠 왼손 자리·오른손 자리를 둔다 (미리보기에서 왼쪽이 왼손, 오른쪽이 오른손)
@@ -433,9 +504,12 @@ async function openCamera() {
   views.camera.classList.toggle('palm', palm);
   $('#cam-kind').textContent = palm ? '손금 촬영' : '관상 촬영';
   handGuide.classList.toggle('hidden', !palm);
-  handGuide2.classList.toggle('hidden', !palm || !bothHands);
-  handPick.classList.toggle('hidden', !palm || bothHands);
+  handGuide2.classList.toggle('hidden', !palm || !isBoth());
+  handPick.classList.toggle('hidden', !palm || handMode !== 'one');
   handModeBtn.classList.toggle('hidden', !palm);
+  handWhy.classList.toggle('hidden', !palm);
+  faceWhy.classList.toggle('hidden', palm);
+  resetTour();
   btnCapture.disabled = true;
   resetHold();
   const ready = palm ? engine.hand : engine.landmarker;
@@ -488,24 +562,33 @@ function liveLoop(now) {
   if (!lm) {
     setLive('', '얼굴이 보이지 않습니다. 타원 안에 얼굴을 맞춰 주세요.');
     resetHold();
+    if (!tour.lost) tour.lost = now;
+    if (now - tour.lost > 2000) { resetTour(); updateFaceWhy('noface'); }   // 잠깐 놓친 건 이어서, 2초 넘게 사라지면 처음부터
     return;
   }
+  tour.lost = 0;
   const pts = toPixels(lm, overlay.width, overlay.height);
   const feat = measure(pts);   // 3D 자세 보정 포함 (고개 각도 판정에도 사용)
   const check = frontalCheck(pts, feat.pose, res.faceBlendshapes?.[0]?.categories);
   drawMesh(ctx, pts, check.ok);
+  drawTourRegion(ctx, pts, now);
   setLive(check.ok ? 'ok' : 'warn', check.msg);
   btnCapture.disabled = !check.ok;
 
-  if (!check.ok) { resetHold(); return; }
+  if (!check.ok) {   // 자세가 흐트러지면 안내는 그 자리에서 잠시 멈춘다
+    goodSince = 0; featureBuf = []; tour.last = now;
+    setProgress(tourAt(tour.ms).frac); updateFaceWhy('paused');
+    return;
+  }
   featureBuf.push({ t: now, f: feat });
   featureBuf = featureBuf.filter(b => now - b.t <= FEATURE_WINDOW_MS);
   if (!goodSince) goodSince = now;
-  if (autoToggle.checked) {
-    const p = clamp((now - goodSince) / AUTO_HOLD_MS, 0, 1);
-    setProgress(p);
-    if (p >= 1) captureFromVideo();
-  }
+  tour.ms += tour.last ? Math.min(now - tour.last, 250) : 0;
+  tour.last = now;
+  const at = tourAt(tour.ms);
+  setProgress(at.frac);
+  updateFaceWhy('ok');
+  if (autoToggle.checked && at.done && now - goodSince >= AUTO_HOLD_MS) captureFromVideo();
 }
 function resetHold() { goodSince = 0; featureBuf = []; setProgress(0); }
 function setProgress(p) { progressRing.style.strokeDashoffset = String(283 * (1 - p)); }
@@ -535,9 +618,13 @@ function palmLoop(now) {
   }));
   if (!hands.length) { setLive('', palmHint()); resetHold(); return; }
   let check;
-  if (!bothHands) {
-    check = palmCheck(hands[0].pts, hands[0].label, now, { region: geo.oval, fit: PALM_FIT, key: 'one' });
-    drawHand(ctx, hands[0].pts, check.ok);
+  if (!isBoth()) {
+    // 차례로 찍을 때는 지금 차례가 아닌 손이 보이면 알려 준다 (왼손 차례에 오른손을 내밀면 반대로 저장되므로)
+    const want = handMode === 'seq' ? seqSide() : null;
+    const pick = want ? (hands.find(h => isPalmFacing(h.pts, h.label) && detectHandSide(h.pts) === want) || hands[0]) : hands[0];
+    check = palmCheck(pick.pts, pick.label, now, { region: geo.oval, fit: PALM_FIT, key: 'one' });
+    if (check.ok && want && detectHandSide(pick.pts) !== want) check = { ok: false, msg: `지금은 ${want === 'left' ? '왼손' : '오른손'} 차례예요. ${want === 'left' ? '왼손' : '오른손'}을 보여 주세요.` };
+    drawHand(ctx, pick.pts, check.ok);
   } else {
     check = bothCheck(hands, now);
     for (const h of hands) drawHand(ctx, h.pts, check.ok);
@@ -554,7 +641,9 @@ function palmLoop(now) {
 }
 
 const PALM_FIT_PAIR = { minW: 0.17, maxW: 0.46, maxDx: 0.6, maxDy: 0.4, maxTilt: 38, maxMove: 0.012 };   // 두 손은 한 손당 화면 절반씩만 쓴다
-const palmHint = () => (bothHands ? '두 손의 손가락을 펴고 손바닥을 안내선에 맞춰 주세요. (왼손은 왼쪽, 오른손은 오른쪽)' : `${handName()} 손가락을 펴고 손바닥을 안내선에 맞춰 주세요.`);
+const palmHint = () => (isBoth() ? '두 손의 손가락을 펴고 손바닥을 안내선에 맞춰 주세요. (왼손은 왼쪽, 오른손은 오른쪽)'
+  : handMode === 'seq' ? `${seqStep + 1}번째, ${seqSide() === 'left' ? '왼손' : '오른손'} 차례예요. 손가락을 펴고 손바닥을 안내선에 맞춰 주세요.`
+  : `${handName()} 손가락을 펴고 손바닥을 안내선에 맞춰 주세요.`);
 
 /** 두 손 촬영 판정: 손이 둘 다 보이고, 좌우 자리에 하나씩 있고, 각각 손바닥·펴짐·크기·위치·움직임이 알맞아야 한다. */
 function bothCheck(hands, now) {
@@ -709,7 +798,7 @@ async function captureFromVideo() {
   ctx.restore();
   stopCamera();
   try {
-    if (palm) await analyzePalmSnapshot({ history: 'replace' });
+    if (palm) await analyzePalmSnapshot({ history: 'replace', seq: handMode === 'seq' });
     else await analyzeSnapshot({ liveFeatures: buf, history: 'replace', fov: { deg: CAMERA_DIAG_FOV, source: 'camera' } });
   } finally { capturing = false; }
 }
@@ -1149,7 +1238,7 @@ $('#btn-install').addEventListener('click', async () => {
 
 
 // ── 손바닥 분석 ──────────────────────────────────────────────
-async function analyzePalmSnapshot({ history: histMode = 'push' } = {}) {
+async function analyzePalmSnapshot({ history: histMode = 'push', seq = false } = {}) {
   show('analyzing', { history: histMode });
   $('#analyzing-steps').innerHTML = '';
   const steps = ['손 모양을 찾는 중…', '손바닥을 똑바로 펴는 중…', '손금 선을 찾는 중…', '생명선·두뇌선·감정선을 읽는 중…'];
@@ -1199,6 +1288,12 @@ async function analyzePalmSnapshot({ history: histMode = 'push' } = {}) {
     refreshFusion();
     renderHub();
     if (current !== 'analyzing') return;   // 분석 중 사용자가 뒤로 감
+    if (seq && seqStep === 0 && combo.palms.left && made.some(p => p.side === 'left')) {   // 선천(왼손)을 마쳤으니 이어서 후천(오른손)을 찍는다
+      seqStep = 1;
+      showToast('왼손(선천)을 읽었어요. 이어서 오른손(후천)을 찍어 주세요.', 3600);
+      startCapture('palm', { replace: true });
+      return;
+    }
     backToHub();
     const poor = made.some(p => p.analysis.quality.level === 'poor');
     const both = !!(combo.palms.left && combo.palms.right);
@@ -1218,14 +1313,14 @@ async function analyzePalmSnapshot({ history: histMode = 'push' } = {}) {
   }
 }
 
-async function handlePalmFile(file) {
+async function handlePalmFile(file, extra = {}) {
   if (!file) return;
   if (analysisBusy || capturing) { showToast('분석이 진행 중입니다. 끝난 뒤에 다시 올려 주세요.'); return; }
   if (file.type && !file.type.startsWith('image/')) { showToast('이미지 파일만 분석할 수 있습니다.'); return; }
   analysisBusy = true;
   try {
     await drawFileToSnapshot(file, PALM_MAX_SIDE);
-    await analyzePalmSnapshot({ history: current === 'hub' ? 'push' : 'replace' });
+    await analyzePalmSnapshot({ history: current === 'hub' ? 'push' : 'replace', ...extra });
   } catch (e) {
     showToast(e.message || String(e), 4000);
     backToHub();
@@ -1409,7 +1504,7 @@ $('#hub-saju-view').addEventListener('click', () => show('saju'));
 $('#hub-face-cam').addEventListener('click', () => startCapture('face'));
 $('#hub-face-up').addEventListener('click', () => { captureKind = 'face'; fileInput.click(); });
 $('#hub-face-view').addEventListener('click', () => show('result'));
-$('#hub-palm-cam').addEventListener('click', () => startCapture('palm'));
+$('#hub-palm-cam').addEventListener('click', () => { seqStep = 0; startCapture('palm'); });
 $('#hub-palm-up').addEventListener('click', () => { captureKind = 'palm'; palmInput.click(); });
 $('#hub-palm-view').addEventListener('click', () => show('palm'));
 $('#hub-go').addEventListener('click', openCombo);
@@ -1448,7 +1543,7 @@ $('#palm-tabs').addEventListener('click', (e) => {
   combo.palm = p; refreshFusion();
   V.renderPalm(p, p.src, combo.palms);
 });
-$('#palm-retake').addEventListener('click', () => startCapture('palm', { replace: true }));
+$('#palm-retake').addEventListener('click', () => { seqStep = 0; startCapture('palm', { replace: true }); });
 $('#combo-save').addEventListener('click', saveComboCard);
 for (const input of [palmInput, palmCaptureInput]) {
   input.addEventListener('change', () => { const f = input.files?.[0]; input.value = ''; handlePalmFile(f); });
@@ -1471,8 +1566,9 @@ handPick.addEventListener('click', () => {
   setLive('', palmHint());
 });
 handModeBtn.addEventListener('click', () => {
-  bothHands = !bothHands;
-  try { localStorage.setItem('gwansang.hands', bothHands ? 'both' : 'one'); } catch { /* 무시 */ }
+  handMode = { seq: 'both', both: 'one', one: 'seq' }[handMode];
+  seqStep = 0;
+  try { localStorage.setItem('gwansang.hands', handMode); } catch { /* 무시 */ }
   palmStable.clear(); resetHold();
   layoutCamera();
   setLive('', palmHint());
@@ -1551,7 +1647,7 @@ window.gwansang = {
   get last() { return lastResult; },
   get combo() { return combo; },
   get live() { return liveInfo; },
-  analyzePalmFromUrl: async (url) => { const blob = await (await fetch(url)).blob(); await handlePalmFile(new File([blob], 'palm.jpg', { type: blob.type || 'image/jpeg' })); return combo.palm; },
+  analyzePalmFromUrl: async (url, extra) => { const blob = await (await fetch(url)).blob(); await handlePalmFile(new File([blob], 'palm.jpg', { type: blob.type || 'image/jpeg' }), extra); return combo.palm; },
   setSaju: (input) => { const saju = computeSaju(input); combo.saju = { input, saju, reading: interpretSaju(saju) }; V.renderSaju(combo.saju); refreshFusion(); renderHub(); return combo.saju; },
   openCombo,
   openExtra,

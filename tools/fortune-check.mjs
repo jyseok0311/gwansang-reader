@@ -9,6 +9,7 @@ import { computeMatch } from '../match.js';
 import { classifyAnimal } from '../animal-face.js';
 import { POP } from '../physiognomy.js';
 import { MAJOR, MINOR, FULL, drawCards, readSpread } from '../tarot.js';
+import { FACE_TOUR, TOUR_STOP_MS, TOUR_TOTAL_MS, tourAt, regionBoxes } from '../face-guide.js';
 import { buildReport } from '../report.js';
 import { analyze } from '../physiognomy.js';
 import { QUESTIONS, TYPES, scoreAnswers, axesFromCode, partners } from '../mbti.js';
@@ -64,6 +65,9 @@ ok(['완드', '컵', '소드', '펜타클'].every(su => MINOR.filter(c => c.suit
 ok(drawCards('five', { who: 'm', deck: 'major' }).every(x => !x.card.minor), '메이저만 고르면 마이너가 나오지 않음');
 const cnt78 = new Map(); for (let i = 0; i < 4000; i++) { const c = drawCards('one', { who: 'f' + i })[0].card.n; cnt78.set(c, (cnt78.get(c) || 0) + 1); }
 ok(cnt78.size === 78 && Math.min(...cnt78.values()) > 25 && Math.max(...cnt78.values()) < 85, `전체 78장이 고르게 나옴 (${Math.min(...cnt78.values())}~${Math.max(...cnt78.values())}회)`);
+ok(FACE_TOUR.length >= 6 && FACE_TOUR.every(t => t.name && t.topic && t.text && t.text.length <= 70 && t.groups.every(g => g.every(i => Number.isInteger(i) && i >= 0 && i < 478))), '관상 부위 안내 데이터 완비(랜드마크 번호 0~477, 설명 70자 이하)');
+ok(tourAt(0).index === 0 && tourAt(TOUR_STOP_MS).index === 1 && tourAt(FACE_TOUR.length * TOUR_STOP_MS).index === -1 && !tourAt(TOUR_TOTAL_MS - 1).done && tourAt(TOUR_TOTAL_MS).done, '관상 부위 안내가 시간에 맞춰 순서대로 넘어가고 끝에서 완료');
+{ const pts = Array.from({ length: 478 }, (_, i) => ({ x: 100 + (i % 20) * 5, y: 100 + Math.floor(i / 20) * 5 })); ok(FACE_TOUR.every(t => regionBoxes(t, pts).every(b => b.w > 0 && b.h > 0)), '부위 강조 상자가 유효함'); }
 ok(['one', 'three', 'five'].every(k => readSpread(k, drawCards(k, { who: 'z' })).summary.length >= 2), '세 스프레드 모두 풀이 생성');
 // MBTI: 20문항(축당 5), 16유형 데이터 완비, 전부 a면 ESTJ, 전부 b면 INFP, 보완 유형 규칙
 ok(QUESTIONS.length === 20 && [0, 1, 2, 3].every(a => QUESTIONS.filter(q => q[0] === a).length === 5), 'MBTI 문항 20개(축당 5개)');
