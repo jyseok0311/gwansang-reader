@@ -4,9 +4,9 @@
 //  모든 그림은 "보일 때" 그려진다: 숨겨진 화면 안의 캔버스는 크기가 0 이므로 ResizeObserver 로 나타나는 순간을 잡는다.
 // ─────────────────────────────────────────────────────────────
 import { ELEMENTS } from './saju.js';
+import { clamp } from './util.js';
 
 const TAU = Math.PI * 2;
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const ease = (t) => 1 - Math.pow(1 - t, 3);
 const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const SERIF = '"Noto Serif KR", serif', SANS = '"Noto Sans KR", sans-serif';

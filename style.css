@@ -73,30 +73,13 @@ button.ghost { background: rgba(244,241,234,.04); color: var(--ink); border: 1px
 @media (hover: hover) { button.ghost:hover { background: rgba(255,255,255,.08); } }
 .chip { min-height: 36px; padding: 6px 14px; font-size: .85rem; background: rgba(255,178,77,.12); color: var(--gold-2); border: 1px solid rgba(255,178,77,.4); flex-shrink: 0; }
 
-/* ── 시작 화면 ── */
-.intro-hero { text-align: center; padding: 26px 0 10px; }
-.ring { width: 180px; height: 180px; margin: 0 auto 24px; border-radius: 50%; position: relative;
-  background: conic-gradient(from 0deg, var(--gold), #b8741c, #b3261e, var(--gold));
-  animation: spin 14s linear infinite; padding: 2px; }
-.ring::after { content: ''; position: absolute; inset: 2px; border-radius: 50%; background: var(--bg); }
-.ring-face { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; animation: spin 14s linear infinite reverse; }
-.ring-face span { position: absolute; font-family: var(--serif); font-weight: 700; color: var(--gold); font-size: 1.05rem; letter-spacing: .1em; }
-.ring-face span:nth-child(1) { top: 26px; }
-.ring-face span:nth-child(2) { bottom: 38px; left: 24px; }
-.ring-face span:nth-child(3) { bottom: 38px; right: 16px; }
-@keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .ring, .ring-face, .scan-line { animation: none; } .panel { animation: none; } }
-.intro h2 { font-family: var(--serif); font-size: clamp(1.55rem, 5.5vw, 2.4rem); line-height: 1.38; margin: 0 0 16px; font-weight: 700; }
-.lead { color: var(--muted); max-width: 640px; margin: 0 auto 24px; }
-.lead b { color: var(--gold-2); font-weight: 500; }
-.cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
+/* ── 엔진 상태 · 안내 ── */
+@media (prefers-reduced-motion: reduce) { .scan-line { animation: none; } .panel { animation: none; } }
 .engine-status { font-size: .82rem; color: var(--dim); margin: 0 0 14px; min-height: 1.3em; }
 .engine-status.ready { color: var(--ok); }
 .engine-status.error { color: var(--warn); }
 .http-note { max-width: 560px; margin: 0 auto 16px; font-size: .85rem; color: var(--body); background: rgba(255,143,107,.08); border: 1px solid rgba(255,143,107,.35); border-radius: 12px; padding: 10px 14px; }
 .http-note b { color: var(--warn); font-weight: 500; }
-.tips { list-style: none; padding: 0; margin: 0 auto; color: var(--dim); font-size: .86rem; max-width: 560px; }
-.tips li::before { content: '· '; color: var(--gold); }
 
 .mobile-card { display: flex; gap: 20px; align-items: center; margin: 30px auto 0; max-width: 640px; background: var(--card); border: 1px solid rgba(255,178,77,.3); border-radius: 18px; padding: 18px 20px; }
 .mobile-card canvas { width: 132px; height: 132px; border-radius: 10px; background: #fff; padding: 8px; flex-shrink: 0; image-rendering: pixelated; }
@@ -301,12 +284,6 @@ body.cam-open .toast { bottom: calc(170px + var(--safe-b)); }
   h1 { font-size: 1.3rem; }
   .tagline { font-size: .82rem; }
   .seal { width: 42px; height: 42px; font-size: 1.3rem; }
-  .cta button { width: 100%; }
-  .ring { width: 150px; height: 150px; }
-  .ring-face span { font-size: .92rem; }
-  .ring-face span:nth-child(1) { top: 22px; }
-  .ring-face span:nth-child(2) { bottom: 32px; left: 18px; }
-  .ring-face span:nth-child(3) { bottom: 32px; right: 10px; }
   .type-seal { width: 60px; height: 60px; font-size: 2rem; }
   .type-card h2 { font-size: 1.45rem; }
   h3.sec { font-size: 1.15rem; margin-top: 32px; }
@@ -332,19 +309,6 @@ button.link { background: none; color: var(--muted); text-decoration: underline;
 .hub-lead { text-align: center; color: var(--muted); max-width: 560px; margin: 0 auto 22px; }
 .hub-lead b { color: var(--gold-2); font-weight: 500; }
 
-/* 소개 화면의 종합 분석 카드 */
-.combo-cta { display: flex; align-items: center; gap: 14px; width: min(100%, 560px); margin: 6px auto 14px; padding: 14px 18px; text-align: left; border-radius: 18px;
-  background: linear-gradient(135deg, rgba(255,178,77,.16), rgba(138,107,255,.12)); border: 1px solid rgba(255,178,77,.5); min-height: 72px; }
-.combo-icons { font-family: var(--serif); font-weight: 900; color: var(--gold-2); font-size: 1.05rem; letter-spacing: .06em; flex-shrink: 0; }
-.combo-text { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.4; }
-.combo-text b { font-size: 1.02rem; color: var(--ink); }
-.combo-text small { color: var(--muted); font-size: .82rem; }
-.combo-go { color: var(--gold-2); font-size: 1.6rem; flex-shrink: 0; }
-.next-card { display: flex; align-items: center; gap: 14px; width: 100%; margin: 26px 0 0; padding: 16px 18px; text-align: left; border-radius: 18px; border: 1px solid rgba(255,178,77,.5);
-  background: linear-gradient(135deg, rgba(255,178,77,.14), rgba(138,107,255,.1)); min-height: 72px; }
-.next-icons { font-family: var(--serif); font-weight: 900; color: var(--gold-2); letter-spacing: .06em; flex-shrink: 0; }
-.next-text { display: flex; flex-direction: column; flex: 1; line-height: 1.4; }
-.next-text small { color: var(--muted); font-size: .82rem; }
 .back-combo { margin-top: 22px; text-align: center; }
 
 /* 허브 (첫 화면) — 천상 × 하이퍼팝: 검은 허공에 단 하나의 따뜻한 빛, 완료의 순간에만 무지갯빛 */
@@ -511,9 +475,6 @@ body[data-view="hub"] header.top { min-height: 0; padding-bottom: 0; justify-con
   .pillars { gap: 6px; }
   .glyph { width: 46px; height: 46px; font-size: 1.6rem; }
   .step { padding: 14px; gap: 12px; }
-  .step-num { width: 44px; height: 44px; font-size: 1.35rem; }
-  .combo-cta { padding: 12px 14px; }
-  .combo-icons { display: none; }
 }
 
 

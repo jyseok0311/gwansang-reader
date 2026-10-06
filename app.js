@@ -427,16 +427,20 @@ async function openCamera() {
 }
 
 // ── 실시간 미리보기 루프 ─────────────────────────────────────
-function liveLoop(now) {
-  rafId = requestAnimationFrame(liveLoop);
-  if (captureKind === 'palm') { palmLoop(now); return; }
-  const lmk = engine.landmarker;
-  if (!stream || !lmk || capturing || engine.mode !== 'VIDEO') return;
-  if (video.readyState < 2 || now - lastDetect < DETECT_INTERVAL || video.currentTime === lastVideoTime) return;
+/** 새 영상 프레임을 검출할 차례인지 확인한다. 차례면 오버레이 크기를 맞추고, 화면·영상 크기가 바뀌었으면 배치를 다시 한다. */
+function frameDue(now) {
+  if (video.readyState < 2 || now - lastDetect < DETECT_INTERVAL || video.currentTime === lastVideoTime) return false;
   lastDetect = now;
   lastVideoTime = video.currentTime;
   syncOverlaySize();
   if (video.videoWidth !== geo.vw || video.videoHeight !== geo.vh || camStage.clientWidth !== geo.sw || camStage.clientHeight !== geo.sh) layoutCamera();
+  return true;
+}
+function liveLoop(now) {
+  rafId = requestAnimationFrame(liveLoop);
+  if (captureKind === 'palm') { palmLoop(now); return; }
+  const lmk = engine.landmarker;
+  if (!stream || !lmk || capturing || engine.mode !== 'VIDEO' || !frameDue(now)) return;
 
   let res;
   try { res = lmk.detectForVideo(video, now); } catch (e) { return; }
@@ -482,11 +486,7 @@ const lightCv = document.createElement('canvas'); lightCv.width = lightCv.height
 
 function palmLoop(now) {
   const hl = engine.hand;
-  if (!stream || !hl || capturing || engine.handMode !== 'VIDEO') return;
-  if (video.readyState < 2 || now - lastDetect < DETECT_INTERVAL || video.currentTime === lastVideoTime) return;
-  lastDetect = now; lastVideoTime = video.currentTime;
-  syncOverlaySize();
-  if (video.videoWidth !== geo.vw || video.videoHeight !== geo.vh || camStage.clientWidth !== geo.sw || camStage.clientHeight !== geo.sh) layoutCamera();
+  if (!stream || !hl || capturing || engine.handMode !== 'VIDEO' || !frameDue(now)) return;
   let res;
   try { res = hl.detectForVideo(video, now); } catch (e) { return; }
   const ctx = overlay.getContext('2d');
@@ -1025,20 +1025,8 @@ async function saveCard() {
   btn.disabled = true;
   try {
     const file = (await cardPromise) || await makeCardFile();
-    const blob = file, name = file.name;
     const t = lastResult.type.primary;
-    if (IS_MOBILE && navigator.canShare?.({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file], title: '관상 판독 결과', text: `나의 관상은 ${t.name}, 종합 ${lastResult.fortune.avg}점!` });
-        return;
-      } catch (e) { if (e.name === 'AbortError') return; }
-    }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = name;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 15000);
-    showToast(IS_MOBILE ? '결과 카드를 다운로드했습니다. 사진첩이나 다운로드 폴더를 확인하세요.' : '결과 카드를 저장했습니다.');
+    await shareOrDownload(file, { title: '관상 판독 결과', text: `나의 관상은 ${t.name}, 종합 ${lastResult.fortune.avg}점!` });
   } catch (e) {
     console.error(e);
     showToast('결과 카드를 만들지 못했습니다.');

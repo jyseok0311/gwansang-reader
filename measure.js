@@ -4,6 +4,8 @@
 //  1) 롤(기울기) → 2) 요(좌우 회전) → 3) 피치(상하 회전) 순으로 정면화한 뒤 비율을 계산한다.
 // ─────────────────────────────────────────────────────────────
 import { PERSPECTIVE_KEYS, PERSPECTIVE_TABLE } from './perspective.js';
+import { clamp } from './util.js';
+export { clamp };
 
 export const LM = {
   top: 10, chin: 152, cheekL: 234, cheekR: 454, jawL: 172, jawR: 397, foreheadL: 103, foreheadR: 332,
@@ -22,7 +24,6 @@ export const SYM_PAIRS = [[33, 263], [133, 362], [61, 291], [234, 454], [129, 35
 // calibrate.mjs 로 계산한 값. 실제 얼굴의 피치를 이 각도에 맞춰 정면화한다.
 export const PITCH_REF = 0.01229;
 
-export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 export const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 export const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: ((a.z ?? 0) + (b.z ?? 0)) / 2 });
 const deg = (r) => r * 180 / Math.PI;

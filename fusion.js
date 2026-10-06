@@ -3,15 +3,13 @@
 //  - 다섯 가지 운을 세 방면의 점수로 비교하고 가중 평균을 낸다.
 //  - 얼굴(오행 형)·손(오행 형)·사주 일간의 오행이 서로 살리는지 누르는지, 사주에 비어 있는 오행을 채워 주는지 풀이한다.
 // ─────────────────────────────────────────────────────────────
-import { ELEMENTS, ELEMENT_ORDER, ELEMENT_GEN, ELEMENT_CTRL } from './saju.js';
+import { ELEMENTS, ELEMENT_GEN, ELEMENT_CTRL } from './saju.js';
 import { josa } from './physiognomy.js';
 
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 export const FORTUNE_KEYS = ['wealth', 'love', 'career', 'health', 'social'];
 export const FORTUNE_NAMES = { wealth: '재물운', love: '애정운', career: '직업·명예운', health: '건강운', social: '대인관계운' };
 const WEIGHT = { face: 0.40, palm: 0.25, saju: 0.35 };
 const SOURCE_NAME = { face: '관상', palm: '손금', saju: '사주' };
-const SOURCE_FULL = { face: '관상(얼굴)', palm: '손금(손바닥)', saju: '사주(태어난 때)' };
 
 const gradeOf = (avg) => (avg >= 81 ? '상격(上格)' : avg >= 74 ? '중상격(中上格)' : '중격(中格)');
 const el = (k) => ELEMENTS[k];
@@ -79,7 +77,7 @@ export function fuse(src) {
 // ── 종합 총평 ────────────────────────────────────────────────
 const REL_TEXT = {
   same: (a, b, e) => `${josa(a, '과', '와')} ${b}의 기운이 모두 ${josa(el(e).name + '(' + el(e).hanja + ')', '으로', '로')} 같아 그 성향이 겹쳐 더욱 뚜렷합니다.`,
-  gen: (a, b, ea, eb) => `${josa(a, '의', '의')} ${josa(el(ea).name, '이', '가')} ${b}의 ${josa(el(eb).name, '을', '를')} 살리는 상생 관계입니다.`,
+  gen: (a, b, ea, eb) => `${a}의 ${josa(el(ea).name, '이', '가')} ${b}의 ${josa(el(eb).name, '을', '를')} 살리는 상생 관계입니다.`,
   genBy: (a, b, ea, eb) => `${b}의 ${josa(el(eb).name, '이', '가')} ${a}의 ${josa(el(ea).name, '을', '를')} 북돋는 상생 관계입니다.`,
   ctrl: (a, b, ea, eb) => `${a}의 ${josa(el(ea).name, '이', '가')} ${b}의 ${josa(el(eb).name, '을', '를')} 누르는 상극 관계라 안에서 서로 다른 목소리가 납니다.`,
   ctrlBy: (a, b, ea, eb) => `${b}의 ${josa(el(eb).name, '이', '가')} ${a}의 ${josa(el(ea).name, '을', '를')} 누르는 상극 관계라 안에서 서로 다른 목소리가 납니다.`,
@@ -116,8 +114,6 @@ function compose(c) {
       : ctrlCount >= 2 ? '세 방면의 기운이 서로 부딪혀 마음속에 갈등이 잦을 수 있으나, 그만큼 다양한 면을 가진 입체적인 사람입니다.'
       : REL_NOTE[first.rel];
     P.push(`오행으로 보면 ${rels.join(', ')}입니다. ${REL_TEXT[first.rel](SOURCE_NAME[first.a], SOURCE_NAME[first.b], first.ea, first.eb)} ${note}`);
-  } else {
-    P.push('');
   }
 
   // 3. 사주의 빈 기운·과한 기운과의 관계

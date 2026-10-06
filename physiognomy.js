@@ -7,8 +7,9 @@
 //  z = 0 은 보통 사람, +1 은 상위 약 16%, -1 은 하위 약 16%.
 //  POP 는 tools/calibrate-population.mjs 로 다시 계산할 수 있다.
 // ─────────────────────────────────────────────────────────────
+import { clamp } from './util.js';
+export { clamp };
 
-export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 // 가상 인물 표본 44명 (전체 61명 중 정면 사진) · [중앙값, 표준편차]
 export const POP = {

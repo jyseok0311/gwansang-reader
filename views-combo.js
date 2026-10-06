@@ -2,8 +2,8 @@
 //  손금·사주·종합 결과 화면 그리기 (DOM 채우기와 결과 카드 그림)
 // ─────────────────────────────────────────────────────────────
 import { ELEMENTS, STEMS, BRANCHES } from './saju.js';
-import { FORTUNE_KEYS, FORTUNE_NAMES, relation } from './fusion.js';
-import { wrapLines, roundRect, $, clampN, esc } from './util.js';
+import { FORTUNE_KEYS, FORTUNE_NAMES } from './fusion.js';
+import { wrapLines, roundRect, $, clamp, esc } from './util.js';
 import { compareHands } from './palm-reading.js';
 import { josa } from './physiognomy.js';
 import { SRC_COLOR, mountChart, createOrrery, drawRadar, drawFlow, drawElementMap, renderRadarImage } from './charts.js';
@@ -162,14 +162,14 @@ export function palmCrop(analysis, lm, W, H) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const p of pts) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
   const pad = Math.max(x1 - x0, y1 - y0) * 0.14;
-  x0 = clampN(x0 - pad, 0, W); y0 = clampN(y0 - pad, 0, H); x1 = clampN(x1 + pad, 0, W); y1 = clampN(y1 + pad, 0, H);
+  x0 = clamp(x0 - pad, 0, W); y0 = clamp(y0 - pad, 0, H); x1 = clamp(x1 + pad, 0, W); y1 = clamp(y1 + pad, 0, H);
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
 
 export function drawPalmOverlay(canvas, src, palm) {
   const { analysis, lm } = palm;
   const crop = palmCrop(analysis, lm, src.width, src.height);
-  const s = clampN(760 / crop.w, 0.3, 2);
+  const s = clamp(760 / crop.w, 0.3, 2);
   canvas.width = Math.round(crop.w * s); canvas.height = Math.round(crop.h * s);
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingQuality = 'high';
@@ -188,7 +188,7 @@ export function drawPalmOverlay(canvas, src, palm) {
     const a = tx(l.points[Math.floor(l.points.length * 0.15)] || l.fullPoints[0]);
     ctx.setLineDash([]); ctx.font = `700 ${Math.max(12, canvas.width / 34)}px "Noto Sans KR", sans-serif`;
     const label = LINE_NAME[key] + (faint ? '(희미)' : ''), tw = ctx.measureText(label).width + 12, th = Math.max(20, canvas.width / 26);
-    const lx = clampN(a.x - tw / 2, 4, canvas.width - tw - 4), ly = clampN(a.y - th - 8, 4, canvas.height - th - 4);
+    const lx = clamp(a.x - tw / 2, 4, canvas.width - tw - 4), ly = clamp(a.y - th - 8, 4, canvas.height - th - 4);
     ctx.fillStyle = 'rgba(5,6,10,.8)'; roundRect(ctx, lx, ly, tw, th, th / 2); ctx.fill();
     ctx.fillStyle = LINE_COLOR[key]; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(label, lx + 6, ly + th / 2 + 1);
   }
@@ -242,7 +242,7 @@ function renderPalmSide(palm, palms) {
   }
   const C = compareHands(palms.left, palms.right);
   const row = (x) => {
-    const pos = (v) => (v == null ? null : clampN((v - 40) / 60 * 100, 0, 100));
+    const pos = (v) => (v == null ? null : clamp((v - 40) / 60 * 100, 0, 100));
     const a = pos(x.left), b = pos(x.right);
     const lo = Math.min(a ?? b, b ?? a), hi = Math.max(a ?? b, b ?? a);
     const tag = x.delta == null ? '' : x.delta > 0 ? `<span class="up">+${x.delta}</span>` : x.delta < 0 ? `<span class="down">${x.delta}</span>` : '<span>±0</span>';

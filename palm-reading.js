@@ -6,8 +6,8 @@
 //  - 선 사이의 관계(가장 또렷한 선, 두뇌선과 감정선의 길이 차 등)와 총평은 모든 특징을 합쳐 따로 쓴다.
 // ─────────────────────────────────────────────────────────────
 import { HAND_POP } from './palm.js';
+import { clamp } from './util.js';
 
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const z = (v, [m, s]) => clamp((v - m) / s, -2.5, 2.5);
 const combine = (terms) => terms.reduce((a, [w, x]) => a + w * x, 0) / Math.sqrt(terms.reduce((a, [w]) => a + w * w, 0));
 const score = (zz) => Math.round(clamp(77 + 10 * zz, 52, 99));

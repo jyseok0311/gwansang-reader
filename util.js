@@ -21,5 +21,5 @@ export function roundRect(ctx, x, y, w, h, r) {
 }
 
 export const $ = (s, root = document) => root.querySelector(s);
-export const clampN = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 export const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

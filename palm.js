@@ -3,8 +3,8 @@
 //  생명선·두뇌선·감정선(·운명선)을 해부학적 위치를 기준으로 따라가며 특징을 잰다.
 //  DOM 의존성 없음 → Node 에서도 시험 가능. 입력 영상은 {data(RGBA), width, height}.
 // ─────────────────────────────────────────────────────────────
+import { clamp } from './util.js';
 
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
 // ── 1. 손바닥 좌표계 ─────────────────────────────────────────
@@ -432,7 +432,7 @@ export function isPalmFacing(lm, label) {
   return (label === 'Left') === (cross > 0);
 }
 
-export function assessQuality(warp, mask, rawRidge) {
+export function assessQuality(warp, mask) {
   const { gray, nx, ny } = warp;
   let sum = 0, n = 0;
   for (let i = 0; i < gray.length; i++) if (mask[i]) { sum += gray[i]; n++; }
@@ -441,7 +441,6 @@ export function assessQuality(warp, mask, rawRidge) {
   const g = blur(gray, nx, ny, 0.9); let gs = 0, gn = 0;
   for (let y = 1; y < ny - 1; y++) for (let x = 1; x < nx - 1; x++) { const i = y * nx + x; if (!mask[i]) continue; gs += Math.abs(g[i + 1] - g[i - 1]) + Math.abs(g[i + nx] - g[i - nx]); gn++; }
   const sharp = gn ? (gs / gn) / Math.max(brightness, 20) : 0;
-  const vals = []; for (let i = 0; i < rawRidge.length; i++) if (mask[i]) vals.push(rawRidge[i]);
   return { brightness, sharp, coverage: n / (nx * ny) };
 }
 
@@ -456,7 +455,7 @@ export function analyzePalm(img, lm) {
   const { ridge } = ridgeMap(warp, mask);
   const { lines, ridgeN } = traceLines(warp, ridge, mask);
   const { measured, bgMedian, bgP90 } = measureLines(warp, lines, ridgeN, mask);
-  const q = assessQuality(warp, mask, ridge);
+  const q = assessQuality(warp, mask);
   const f = warp.frame;
   const toImg = (pts) => pts.map(p => { const c = warp.toPalm(p.x, p.y); return palmToImage(f, c.a, c.b); });
   const out = {};

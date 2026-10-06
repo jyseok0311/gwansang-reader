@@ -6,6 +6,7 @@
 //  - 음력 생일은 한국천문연구원 기준 달력(korean-lunar-calendar)으로 양력 변환
 // ─────────────────────────────────────────────────────────────
 import KoreanLunarCalendar from './vendor/korean-lunar-calendar/korean-lunar-calendar.mjs';
+import { clamp } from './util.js';
 
 export const STEMS = [
   { hanja: '甲', ko: '갑', el: 'wood', yang: true }, { hanja: '乙', ko: '을', el: 'wood', yang: false },
@@ -191,7 +192,6 @@ function relation(me, other) {
   if (CTRL[me] === other) return 'iCtrl';
   return 'ctrlMe';
 }
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const score = (z) => Math.round(clamp(77 + 9 * z, 55, 99));
 
 export function interpretSaju(s) {
@@ -256,5 +256,4 @@ export function interpretSaju(s) {
 }
 
 export const ELEMENTS = EL;
-export const ELEMENT_ORDER = ORDER;
 export { GEN as ELEMENT_GEN, CTRL as ELEMENT_CTRL };
