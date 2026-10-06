@@ -554,3 +554,49 @@ canvas.chart.orrery:focus-visible { outline: 2px solid var(--gold-2); outline-of
 .cmp-track em { position: absolute; top: 4px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, #4fc3ff, #ffb24d); opacity: .75; }
 .cmp p { margin: 0; font-size: .84rem; color: var(--muted); line-height: 1.55; }
 .cmp-sum { margin: 12px 4px 0; font-size: .92rem; color: var(--body); line-height: 1.65; }
+
+/* 오늘의 운세 · 올해·월별 · 별자리 */
+.hub-extra { max-width: 640px; margin: 28px auto 0; text-align: center; }
+.hub-extra-title { margin: 0 0 12px; font-family: var(--serif); font-size: 1.05rem; letter-spacing: .06em; color: var(--ink); }
+.xtiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.xtile { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 6px 12px; min-height: 92px; border-radius: 18px; background: linear-gradient(180deg, rgba(244,241,234,.05), rgba(244,241,234,.012)); border: 1px solid var(--card-b); color: var(--ink); }
+.xtile b { font-family: var(--serif); font-weight: 900; font-size: 1.7rem; line-height: 1; color: var(--gold-2); text-shadow: 0 0 16px rgba(255,178,77,.7); }
+.xtile span { font-size: .84rem; color: var(--muted); }
+.xtile.off b { color: var(--dim); text-shadow: none; }
+.hub-extra-hint { margin: 10px 0 0; font-size: .82rem; color: var(--dim); }
+.extra-pane { min-height: 200px; }
+.day-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 0 12px; }
+.day-nav > div { text-align: center; line-height: 1.35; }
+.day-nav small { display: block; color: var(--dim); font-size: .8rem; }
+.day-nav a { color: var(--gold-2); }
+.day-nav button { min-height: 44px; width: 44px; padding: 0; border-radius: 50%; background: rgba(244,241,234,.05); border: 1px solid var(--card-b); color: var(--ink); }
+.fortunes.one { grid-template-columns: 1fr; align-content: start; }
+.lucky { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 10px; }
+.lucky div { background: var(--card); border: 1px solid var(--card-b); border-radius: 14px; padding: 12px 14px; }
+.lucky small { display: block; color: var(--dim); font-size: .76rem; margin-bottom: 2px; }
+.lucky b { font-size: .95rem; font-family: var(--serif); }
+.astro-card { background: var(--card); border: 1px solid var(--card-b); border-radius: 18px; padding: 16px 18px; }
+.astro-card p { margin: 8px 0 0; font-size: .92rem; color: var(--body); line-height: 1.65; }
+.astro-head { display: flex; align-items: center; gap: 12px; }
+.astro-head .sym { font-size: 2.2rem; line-height: 1; color: var(--gold-2); }
+.astro-head b { font-family: var(--serif); }
+.astro-head small { display: block; color: var(--dim); font-size: .78rem; }
+.astro-moon { margin-left: auto; text-align: right; }
+.zodiac-sym { font-size: 3.6rem; line-height: 1; color: var(--ink); text-shadow: 0 0 28px rgba(138,107,255,.75), 0 0 64px rgba(79,195,255,.35); }
+.zodiac-hero .combo-score { margin: 4px 0; }
+.compat { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px; }
+.compat div { background: var(--card); border: 1px solid var(--card-b); border-radius: 14px; padding: 12px 14px; }
+.compat small { display: block; color: var(--dim); font-size: .76rem; margin-bottom: 2px; }
+.compat b { font-family: var(--serif); font-size: .98rem; }
+canvas.chart.monthly { aspect-ratio: 16 / 10; }
+.month-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 12px 0; }
+.month-grid button { min-height: 56px; padding: 6px 2px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; background: var(--card); border: 1px solid var(--card-b); color: var(--ink); }
+.month-grid small { font-size: .72rem; color: var(--dim); }
+.month-grid b { font-family: var(--serif); font-size: 1.05rem; }
+.month-grid .lv-top { background: rgba(255,178,77,.2); border-color: rgba(255,178,77,.55); }
+.month-grid .lv-good { background: rgba(255,178,77,.1); }
+.month-grid .lv-low { background: rgba(255,120,120,.1); border-color: rgba(255,120,120,.3); }
+.month-grid .cur small { color: var(--gold-2); font-weight: 700; }
+.month-grid .sel { outline: 2px solid var(--gold-2); outline-offset: 1px; }
+.month-detail { margin-bottom: 4px; }
+.month-detail p:first-child { margin-top: 0; }

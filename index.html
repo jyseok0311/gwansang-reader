@@ -83,6 +83,16 @@
         <button id="hub-reset" class="link" type="button">처음부터 다시</button>
       </div>
 
+      <section class="hub-extra" aria-label="오늘의 운세·별자리·띠">
+        <h3 class="hub-extra-title">오늘의 운세 · 올해 · 별자리</h3>
+        <div class="xtiles">
+          <button class="xtile" type="button" data-extra="today"><b aria-hidden="true">今</b><span>오늘의 운세</span></button>
+          <button class="xtile" type="button" data-extra="year"><b aria-hidden="true">歲</b><span>올해·월별·띠</span></button>
+          <button class="xtile" type="button" data-extra="zodiac"><b aria-hidden="true">星</b><span>별자리</span></button>
+        </div>
+        <p id="hub-extra-hint" class="hub-extra-hint"></p>
+      </section>
+
       <p id="engine-status" class="engine-status" aria-live="polite">판독 엔진 준비 중…</p>
       <p id="http-note" class="http-note hidden">이 주소는 HTTPS가 아니어서 실시간 촬영 가이드 없이 <b>휴대폰 기본 카메라</b>로 촬영합니다. 실시간 가이드를 쓰려면 <b>https://</b> 주소로 접속하세요.</p>
 
@@ -364,6 +374,24 @@
       <div class="result-bar">
         <button class="primary" type="button" data-goto="hub">🏠 처음으로</button>
         <button class="ghost" type="button" id="palm-retake">📷 재촬영</button>
+      </div>
+    </section>
+
+    <!-- 오늘·올해·별자리 -->
+    <section id="view-extra" class="panel hidden result extra">
+      <h2 class="hub-title">시간의 운세 <small>今 · 歲 · 星</small></h2>
+      <div id="extra-tabs" class="palm-tabs" role="tablist" aria-label="운세 종류">
+        <button type="button" role="tab" data-tab="today">오늘</button>
+        <button type="button" role="tab" data-tab="year">올해·월별·띠</button>
+        <button type="button" role="tab" data-tab="zodiac">별자리</button>
+      </div>
+      <div id="extra-today" class="extra-pane"></div>
+      <div id="extra-year" class="extra-pane hidden"></div>
+      <div id="extra-zodiac" class="extra-pane hidden"></div>
+      <p class="disclaimer">※ 사주의 일간과 오늘·올해·이달의 간지가 만나는 관계(십성·12운성·합충)와 별자리를 오락용으로 풀이한 결과입니다. 같은 날에는 같은 결과가 나오며 과학적 근거가 없습니다.</p>
+      <div class="result-bar">
+        <button class="primary" type="button" data-goto="hub">🏠 처음으로</button>
+        <button class="ghost" type="button" id="extra-save">💾 오늘 카드 저장</button>
       </div>
     </section>
 

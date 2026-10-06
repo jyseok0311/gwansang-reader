@@ -152,6 +152,35 @@ export function drawFlow(ctx, w, h, k, { points, min = 80, max = 120 }) {
   });
 }
 
+// ── 2-2. 월별 운세 꺾은선 (열두 달) ──────────────────────────
+/** @param values 열두 달 점수, current 이번 달(1~12), selected 고른 달 */
+export function drawMonthly(ctx, w, h, k, { values, current, selected, min = 50, max = 95 }) {
+  const n = values.length, fs = clamp(w / 30, 10, 13), padT = fs * 2.4, padB = fs * 2.8, padX = w * 0.06;
+  const gx = (i) => padX + (w - padX * 2) * i / (n - 1), gy = (v) => padT + (1 - clamp((v - min) / (max - min), 0, 1)) * (h - padT - padB);
+  ctx.setLineDash([3, 5]); ctx.lineWidth = 1; ctx.strokeStyle = GRID;
+  for (const v of [60, 70, 80, 90]) { ctx.beginPath(); ctx.moveTo(padX * 0.5, gy(v)); ctx.lineTo(w - padX * 0.5, gy(v)); ctx.stroke(); }
+  ctx.setLineDash([]);
+  const P = values.map((v, i) => ({ x: gx(i), y: gy(v) }));
+  const path = new Path2D(); path.moveTo(P[0].x, P[0].y);
+  for (let i = 0; i < n - 1; i++) { const a = P[i], b = P[i + 1], mx = (a.x + b.x) / 2; path.bezierCurveTo(mx, a.y, mx, b.y, b.x, b.y); }
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, w * k, h); ctx.clip();
+  const fill = new Path2D(path); fill.lineTo(P[n - 1].x, h - padB); fill.lineTo(P[0].x, h - padB); fill.closePath();
+  const g = ctx.createLinearGradient(0, padT, 0, h - padB); g.addColorStop(0, rgba(SRC_COLOR.all, 0.3)); g.addColorStop(1, rgba(SRC_COLOR.all, 0));
+  ctx.fillStyle = g; ctx.fill(fill);
+  ctx.shadowColor = rgba(SRC_COLOR.all, 0.7); ctx.shadowBlur = 10; ctx.lineWidth = 2.4; ctx.strokeStyle = SRC_COLOR.all; ctx.lineJoin = 'round'; ctx.stroke(path);
+  ctx.restore();
+  const hi = Math.max(...values), lo = Math.min(...values);
+  values.forEach((v, i) => {
+    if (P[i].x / w > k + 0.02) return;
+    const isSel = i + 1 === selected, isCur = i + 1 === current;
+    ctx.beginPath(); ctx.arc(P[i].x, P[i].y, isSel ? 5.5 : 3.2, 0, TAU); ctx.fillStyle = isSel ? '#fff' : SRC_COLOR.all; ctx.fill();
+    if (isCur) { ctx.beginPath(); ctx.arc(P[i].x, P[i].y, 8.5, 0, TAU); ctx.lineWidth = 1.6; ctx.strokeStyle = '#ffd08a'; ctx.stroke(); }
+    if (isSel || v === hi || v === lo) label(ctx, String(v), P[i].x, P[i].y - (isSel ? 15 : 12), { size: fs * 1.05, weight: 700, font: SERIF, color: isSel ? '#fff' : (v === hi ? '#ffd08a' : MUTED) });
+    label(ctx, String(i + 1), P[i].x, h - padB + fs * 1.4, { size: fs * 0.95, weight: isCur ? 700 : 500, color: isCur ? '#ffd08a' : MUTED });
+  });
+  label(ctx, '월', w - padX * 0.2, h - padB + fs * 1.4, { size: fs * 0.85, color: MUTED, align: 'right' });
+}
+
 // ── 3. 오행 구성도 (상생·상극과 세 방면의 자리) ───────────────
 const EL_ORDER = ['wood', 'fire', 'earth', 'metal', 'water'];     // 시계 방향으로 상생
 const SRC_GLYPH = { face: '相', palm: '手', saju: '命' };

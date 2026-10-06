@@ -256,4 +256,5 @@ export function interpretSaju(s) {
 }
 
 export const ELEMENTS = EL;
+export { ANIMAL_TEXT };
 export { GEN as ELEMENT_GEN, CTRL as ELEMENT_CTRL };

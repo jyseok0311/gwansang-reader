@@ -11,6 +11,7 @@ import { analyzePalmOffThread } from './palm-runner.js';
 import { interpretPalm } from './palm-reading.js';
 import { fuse } from './fusion.js';
 import * as V from './views-combo.js';
+import * as X from './views-extra.js';
 import { wrapLines, roundRect } from './util.js';
 import { createEmbers } from './embers.js';
 
@@ -39,9 +40,9 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 const views = {
   camera: $('#view-camera'), analyzing: $('#view-analyzing'), result: $('#view-result'),
-  hub: $('#view-hub'), sajuform: $('#view-sajuform'), saju: $('#view-saju'), palm: $('#view-palm'), combo: $('#view-combo'),
+  hub: $('#view-hub'), sajuform: $('#view-sajuform'), saju: $('#view-saju'), palm: $('#view-palm'), combo: $('#view-combo'), extra: $('#view-extra'),
 };
-const BAR_VIEWS = new Set(['result', 'saju', 'palm', 'combo']);   // 하단 고정 버튼 막대가 있는 화면
+const BAR_VIEWS = new Set(['result', 'saju', 'palm', 'combo', 'extra']);   // 하단 고정 버튼 막대가 있는 화면
 const video = $('#video');
 const overlay = $('#overlay');
 const camStage = $('#cam-stage');
@@ -67,6 +68,8 @@ const engine = { mod: null, vision: null, source: null, delegate: null, landmark
 // 종합 분석: 관상(face)·손금(palm)·사주(saju) 결과와 합친 결과(fused)
 // palm: 가장 최근에 본 손, palms: 왼손·오른손 각각 (둘 다 있으면 비교해 보여 주고 종합에는 평균을 쓴다)
 const combo = { face: null, palm: null, palms: { left: null, right: null }, saju: null, fused: null };
+let afterSaju = null;       // 생년월일이 없어 사주 입력으로 보낸 경우, 입력이 끝나면 열 운세 탭
+const extra = { tab: 'today', offset: 0, month: null };   // 오늘·올해·별자리 화면의 상태
 let captureKind = 'face';   // 지금 카메라로 찍는 것: 'face' | 'palm'
 let handSide = 'right';     // 손금 촬영 때 안내선에 그릴 손: 'right' | 'left' (고른 값은 기억한다)
 try { if (localStorage.getItem('gwansang.hand') === 'left') handSide = 'left'; } catch { /* 무시 */ }
@@ -123,6 +126,7 @@ function show(name, { history: mode = 'push' } = {}) {
   document.body.classList.toggle('cam-open', name === 'camera');
   embers.set(name === 'hub' || name === 'combo');
   if (name === 'camera') syncViewport();
+  if (name !== 'sajuform') afterSaju = null;   // 사주 입력을 취소하고 다른 화면으로 가면 '입력 뒤 열기' 예약을 지운다
   if (mode === 'push' && prev !== name) history.pushState({ view: name }, '');
   else if (mode === 'replace') history.replaceState({ view: name }, '');
   window.scrollTo({ top: 0, behavior: BAR_VIEWS.has(name) ? 'auto' : 'smooth' });
@@ -134,7 +138,7 @@ embers.set(true);
 window.addEventListener('popstate', (e) => {
   let v = e.state?.view || 'hub';
   if (v === 'analyzing' || (v === 'result' && !lastResult)) v = 'hub';
-  if ((v === 'palm' && !combo.palm) || (v === 'saju' && !combo.saju) || (v === 'combo' && !combo.fused)) v = 'hub';
+  if ((v === 'palm' && !combo.palm) || (v === 'saju' && !combo.saju) || (v === 'combo' && !combo.fused) || (v === 'extra' && !combo.saju)) v = 'hub';
   if (current === 'camera' && v !== 'camera') stopCamera();
   if (v === 'hub') renderHub();
   show(v, { history: 'none' });
@@ -1197,6 +1201,8 @@ function renderHub() {
   $('#hub-pips').setAttribute('aria-label', `완료한 단계 ${n}/3`);
   if (fresh && current === 'hub') bloom();
   $('#hub-go').disabled = n < 2;
+  $$('.xtile').forEach(b => b.classList.toggle('off', !combo.saju));
+  $('#hub-extra-hint').textContent = combo.saju ? `내 사주(${combo.saju.reading.dayMaster.ko}${combo.saju.reading.dayMaster.elName.ko} 일간) 기준으로 풀이합니다.` : '생년월일을 입력하면 풀이해 드립니다. 눌러서 바로 입력하세요.';
   $('#hub-hint').textContent = n < 2 ? `두 가지 이상 완료하면 종합 결과를 볼 수 있습니다. (${n}/3 완료)`
     : n === 2 ? '한 가지를 더 하면 더 정확해지지만, 지금도 종합 결과를 볼 수 있습니다.' : '세 가지를 모두 완료했습니다!';
 }
@@ -1205,6 +1211,14 @@ function openCombo() {
   if (!combo.fused) return;
   V.renderCombo(combo.fused, combo);
   show('combo');
+}
+/** 오늘의 운세 · 올해·월별·띠 · 별자리 화면 열기. 생년월일이 없으면 사주 입력을 먼저 받는다. */
+function openExtra(tab, { replace = false } = {}) {
+  if (!combo.saju) { afterSaju = tab; showToast('생년월일을 먼저 입력해 주세요.'); show('sajuform'); return; }
+  if (tab !== extra.tab) { extra.offset = 0; extra.month = null; }
+  extra.tab = tab;
+  X.renderExtra(combo.saju, extra);
+  show('extra', { history: replace ? 'replace' : 'push' });
 }
 function goto(name) {
   if (name === 'hub') { renderHub(); show('hub'); }
@@ -1260,6 +1274,7 @@ function submitSaju() {
     V.renderSaju(st);
     refreshFusion();
     renderHub();
+    if (afterSaju) { const t = afterSaju; afterSaju = null; openExtra(t, { replace: true }); return; }
     backToHub();
     showToast('사주 계산이 끝났습니다. 「결과 보기」로 확인하세요.', 3600);
   } catch (err) { fail(err.message || '사주를 계산하지 못했습니다.'); }
@@ -1302,6 +1317,28 @@ $('#hub-palm-cam').addEventListener('click', () => startCapture('palm'));
 $('#hub-palm-up').addEventListener('click', () => { captureKind = 'palm'; palmInput.click(); });
 $('#hub-palm-view').addEventListener('click', () => show('palm'));
 $('#hub-go').addEventListener('click', openCombo);
+document.querySelectorAll('.xtile').forEach(b => b.addEventListener('click', () => openExtra(b.dataset.extra)));
+$('#view-extra').addEventListener('click', (e) => {
+  const tab = e.target.closest('[data-tab]'), d = e.target.closest('[data-d]'), mo = e.target.closest('[data-month]');
+  if (!tab && !d && !mo) return;
+  e.preventDefault();
+  if (tab) { extra.tab = tab.dataset.tab; if (extra.tab !== 'today') extra.offset = 0; }
+  if (d) extra.offset = +d.dataset.d;
+  if (mo) extra.month = +mo.dataset.month;
+  X.renderExtra(combo.saju, extra);
+});
+$('#extra-save').addEventListener('click', async () => {
+  if (!combo.saju) return;
+  const btn = $('#extra-save'); btn.disabled = true;
+  try {
+    const canvas = await X.drawTodayCard(combo.saju, extra.offset);
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9));
+    if (!blob) throw new Error('카드 이미지를 만들지 못했습니다.');
+    const file = new File([blob], `오늘의운세_${new Date().toISOString().slice(0, 10)}.jpg`, { type: 'image/jpeg' });
+    await shareOrDownload(file, { title: '오늘의 운세', text: '운명 판독기로 본 오늘의 운세' });
+  } catch (err) { console.error(err); showToast('운세 카드를 만들지 못했습니다.'); }
+  finally { btn.disabled = false; }
+});
 $('#hub-reset').addEventListener('click', () => { combo.face = combo.palm = combo.saju = combo.fused = null; combo.palms = { left: null, right: null }; lastResult = null; cardPromise = null; renderHub(); syncBackLinks(); showToast('처음부터 다시 시작합니다.'); });
 $('#palm-tabs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-side]'); const p = b && combo.palms[b.dataset.side];
@@ -1408,6 +1445,7 @@ window.gwansang = {
   analyzePalmFromUrl: async (url) => { const blob = await (await fetch(url)).blob(); await handlePalmFile(new File([blob], 'palm.jpg', { type: blob.type || 'image/jpeg' })); return combo.palm; },
   setSaju: (input) => { const saju = computeSaju(input); combo.saju = { input, saju, reading: interpretSaju(saju) }; V.renderSaju(combo.saju); refreshFusion(); renderHub(); return combo.saju; },
   openCombo,
+  openExtra,
   goto,
   get geo() { return { ...geo }; },
   get engine() { return { source: engine.source?.name, delegate: engine.delegate, mode: engine.mode }; },
