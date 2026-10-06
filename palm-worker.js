@@ -3,9 +3,9 @@
 import { analyzePalm } from './palm.js';
 
 self.onmessage = (e) => {
-  const { data, width, height, lm } = e.data;
+  const { data, width, height, lm, world } = e.data;
   try {
-    const out = analyzePalm({ data: new Uint8ClampedArray(data), width, height }, lm);
+    const out = analyzePalm({ data: new Uint8ClampedArray(data), width, height }, lm, world);
     self.postMessage({ ok: true, out });
   } catch (err) {
     self.postMessage({ ok: false, message: String((err && err.message) || err) });

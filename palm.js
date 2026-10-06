@@ -377,15 +377,26 @@ export const HAND_POP = {                      // [평균, 표준편차] — 손
   indexRing: [1.0, 0.045],                     // 검지 길이 ÷ 약지 길이
   spread: [38, 9],                             // 검지·새끼 손가락 방향이 벌어진 각도(도)
 };
-export function handShape(lm) {
-  const d = (i, j) => dist(lm[i], lm[j]);
+/**
+ * 손 모양 측정. world(= MediaPipe 가 돌려주는 손 중심 기준 실제 크기 3D 좌표, 미터)가 있으면 그것으로 잰다.
+ * 화면 좌표(2D)로 재면 손을 기울이거나 손가락을 조금만 굽혀도 손가락이 짧게 찍혀, 누구나 "손가락이 짧은 손(화형수)"으로 쏠린다.
+ * 3D 좌표와 마디 길이의 합(굽혀도 같다)으로 재면 기울기·굽힘에 거의 영향을 받지 않는다.
+ */
+export function handShape(lm, world = null) {
+  const use3 = !!(world && world.length >= 21);
+  const d = use3 ? (i, j) => Math.hypot(world[i].x - world[j].x, world[i].y - world[j].y, (world[i].z || 0) - (world[j].z || 0)) : (i, j) => dist(lm[i], lm[j]);
+  const vec = use3 ? (i, j) => ({ x: world[j].x - world[i].x, y: world[j].y - world[i].y, z: (world[j].z || 0) - (world[i].z || 0) }) : (i, j) => ({ x: lm[j].x - lm[i].x, y: lm[j].y - lm[i].y, z: 0 });
+  const angBetween = (a0, a1, b0, b1) => {
+    const u = vec(a0, a1), v = vec(b0, b1);
+    const c = (u.x * v.x + u.y * v.y + u.z * v.z) / ((Math.hypot(u.x, u.y, u.z) * Math.hypot(v.x, v.y, v.z)) || 1);
+    return Math.acos(clamp(c, -1, 1)) * 180 / Math.PI;
+  };
   const f = palmFrame(lm);
-  const angle = (i, j) => Math.atan2(lm[j].y - lm[i].y, lm[j].x - lm[i].x);
-  const angBetween = (a0, a1, b0, b1) => { let x = Math.abs(angle(a0, a1) - angle(b0, b1)) * 180 / Math.PI; if (x > 180) x = 360 - x; return x; };
   const spread = angBetween(5, 8, 17, 20);
   const palmLen = d(0, 9);
+  const path = (b) => d(b, b + 1) + d(b + 1, b + 2) + d(b + 2, b + 3);   // 뿌리 → 끝 마디 길이의 합 (굽혀도 변하지 않는다)
   // 손가락별 길이(손바닥 길이에 대한 비) — 검지·중지·약지·새끼. 각각 목성·토성·태양·수성 손가락
-  const fl = { index: d(5, 8) / palmLen, middle: d(9, 12) / palmLen, ring: d(13, 16) / palmLen, pinky: d(17, 20) / palmLen };
+  const fl = { index: path(5) / palmLen, middle: path(9) / palmLen, ring: path(13) / palmLen, pinky: path(17) / palmLen };
   // 마디 비율: 손끝 마디(의지·정신) · 가운데 마디(이성) · 뿌리 마디(현실·물질). 네 손가락 평균
   const phal = [0, 0, 0];
   for (const base of [5, 9, 13, 17]) {
@@ -402,10 +413,10 @@ export function handShape(lm) {
   // 인접 손가락 사이 벌어짐(도)
   const gapIM = angBetween(5, 8, 9, 12), gapMR = angBetween(9, 12, 13, 16), gapRP = angBetween(13, 16, 17, 20);
   return {
-    palmRatio: f.rho,
-    fingerRatio: d(9, 12) / d(0, 9),
-    thumbRatio: (d(1, 2) + d(2, 3) + d(3, 4)) / d(0, 9),
-    indexRing: d(5, 8) / d(13, 16),
+    palmRatio: use3 ? palmLen / d(5, 17) : f.rho,
+    fingerRatio: fl.middle,
+    thumbRatio: (d(1, 2) + d(2, 3) + d(3, 4)) / palmLen,
+    indexRing: fl.index / fl.ring,
     spread,
     palmWidthPx: f.W,
     fingerLen: fl,
@@ -413,6 +424,7 @@ export function handShape(lm) {
     middleIndex: fl.middle / fl.index,
     phalanx: { tip: phal[0], mid: phal[1], base: phal[2] },
     pinkyReach, thumbOpen, thumbTipB, gapIM, gapMR, gapRP,
+    measuredIn: use3 ? '3D' : '2D',
   };
 }
 
@@ -449,7 +461,7 @@ export function assessQuality(warp, mask) {
  * @param img {data, width, height}  @param lm 21개 관절점 [{x,y}] (픽셀)
  * @returns 펴 놓은 손바닥, 찾은 선(영상 좌표), 선 특징, 손 모양, 사진 상태
  */
-export function analyzePalm(img, lm) {
+export function analyzePalm(img, lm, world = null) {
   const warp = warpPalm(img, lm);
   const { mask } = palmMask(warp, lm);
   const { ridge } = ridgeMap(warp, mask);
@@ -468,5 +480,5 @@ export function analyzePalm(img, lm) {
   if (q.brightness < 60) issues.push('dark'); else if (q.brightness > 225) issues.push('bright');
   if (q.sharp < 0.012) issues.push('blur');
   if (meanContrast < 1.6) issues.push('faint');
-  return { frame: f, lines: out, hand: handShape(lm), quality: { ...q, meanContrast, bgMedian, bgP90, issues, level: issues.length === 0 ? 'good' : issues.length === 1 ? 'fair' : 'poor' } };
+  return { frame: f, lines: out, hand: handShape(lm, world), quality: { ...q, meanContrast, bgMedian, bgP90, issues, level: issues.length === 0 ? 'good' : issues.length === 1 ? 'fair' : 'poor' } };
 }

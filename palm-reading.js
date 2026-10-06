@@ -47,7 +47,10 @@ export const HAND_TYPES = {
 };
 
 export function classifyHand(h) {
-  const zz = { P: z(h.palmRatio, HAND_POP.palmRatio), F: z(h.fingerRatio, HAND_POP.fingerRatio), T: z(h.thumbRatio, HAND_POP.thumbRatio) };
+  // 3D 관절점 없이 화면 좌표로만 잰 손가락 길이는 손가락을 살짝만 굽혀도 짧게 찍힌다(길게 찍히는 일은 없다).
+  // 그래서 이 경우 "짧다"는 판정은 크게 줄여 반영한다 — 손가락이 짧은 유형(화·토)으로 쏠리던 원인
+  const zF = z(h.fingerRatio, HAND_POP.fingerRatio);
+  const zz = { P: z(h.palmRatio, HAND_POP.palmRatio), F: h.measuredIn === '3D' || zF >= 0 ? zF : zF * 0.25, T: z(h.thumbRatio, HAND_POP.thumbRatio) };
   const s = {};
   for (const [k, t] of Object.entries(HAND_TYPES)) {
     let dot = 0, norm = 0;
