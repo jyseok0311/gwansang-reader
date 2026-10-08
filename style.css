@@ -514,7 +514,9 @@ canvas.chart.orrery:focus-visible { outline: 2px solid var(--gold-2); outline-of
 .face-why .hw-text { min-height: calc(3 * 1.5em); }
 .hand-why.compact .hw-text, .face-why.compact .hw-text { display: none; }
 .hand-why.compact, .face-why.compact { padding: 6px 12px; }
-.hand-why.tight, .face-why.tight { display: none; }
+.hand-why.tight { left: auto; padding: 0; background: none; border: 0; -webkit-backdrop-filter: none; backdrop-filter: none; }   /* 자리가 아주 좁으면 설명은 빼고 버튼만 남긴다 */
+.hand-why.tight .hw-badge, .hand-why.tight .hw-text { display: none; }
+.face-why.tight { display: none; }
 .fw-dots { color: var(--gold-2); font-size: .72rem; letter-spacing: 3px; white-space: nowrap; }
 .hw-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .hw-badge { color: var(--gold-2); font-size: .88rem; }

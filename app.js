@@ -9,7 +9,7 @@ import { computeSaju, interpretSaju } from './saju.js';
 import { isPalmFacing, handSide as detectHandSide } from './palm.js';
 import { analyzePalmOffThread } from './palm-runner.js';
 import { interpretPalm } from './palm-reading.js';
-import { FACE_TOUR, tourAt, regionBoxes } from './face-guide.js';
+import { FACE_TOUR, TOUR_TOTAL_MS, tourAt, regionBoxes } from './face-guide.js';
 import { fuse } from './fusion.js';
 import * as V from './views-combo.js';
 import * as X from './views-extra.js';
@@ -117,6 +117,7 @@ function updateFaceWhy(state) {
   if (fwBadge.textContent !== badge) fwBadge.textContent = badge;
   if (fwText.textContent !== text) fwText.textContent = text;
   if (fwDots.textContent !== dots) fwDots.textContent = dots;
+  whyReflow(faceWhy);
 }
 /** 지금 짚는 부위를 얼굴 위에 빛나게 표시 (미리보기가 거울이어도 캔버스가 같이 뒤집히므로 글자는 캔버스에 쓰지 않는다) */
 function drawTourRegion(ctx, pts, now) {
@@ -144,6 +145,21 @@ function updateHandWhy() {
   else [badge, text] = HAND_WHY[handSide];
   if (hwBadge.textContent !== badge) hwBadge.textContent = badge;
   if (hwText.textContent !== text) hwText.textContent = text;
+  // 버튼 표시·이름도 여기서 정한다 (카드 높이를 재기 전에 정해져 있어야 겹치지 않는다)
+  handPick.classList.toggle('hidden', handMode !== 'one');
+  handModeBtn.classList.toggle('hidden', false);
+  handModeBtn.firstChild.textContent = { seq: '👣 차례로 ', both: '🙌 두 손 함께 ', one: '✋ 한 손만 ' }[handMode];
+  handPick.firstChild.textContent = `✋ ${handName()} `;
+  handModeBtn.setAttribute('aria-label', `손금 촬영 방식: ${{ seq: '차례로', both: '두 손 함께', one: '한 손만' }[handMode]} (누르면 바꿉니다)`);
+  handPick.setAttribute('aria-label', `촬영할 손: ${handName()} (누르면 바꿉니다)`);
+  whyReflow(handWhy);
+}
+let laying = false;   // layoutCamera 가 카드를 재는 동안에는 다시 배치를 요청하지 않는다
+/** 카드 글이 바뀌어 높이가 달라졌으면(좁은 화면에서 줄 수가 늘 때) 얼굴·손 자리를 다시 잡는다 */
+function whyReflow(card) {
+  if (laying || current !== 'camera' || !stream || card.classList.contains('hidden')) return;
+  const h = Math.round(card.getBoundingClientRect().height);
+  if (Math.abs(h - (card._h || 0)) > 3) { card._h = h; layoutCamera(); }
 }
 const palmStable = new Map();   // 손 자리별 직전 위치 (움직임 감지용)
 const PALM_MAX_SIDE = 1920;   // 손금 사진은 두 손이 한 장에 들어가므로 얼굴보다 크게 보관한다
@@ -403,11 +419,12 @@ function layoutCamera() {
     // 설명 카드: 자리가 넉넉하면 전체를, 모자라면 제목 한 줄만, 그래도 모자라면 숨겨서 얼굴·손이 들어갈 자리를 지킨다 (가로 화면·작은 휴대폰)
     const palm = captureKind === 'palm', card = palm ? handWhy : faceWhy;
     handWhy.classList.toggle('hidden', !palm); faceWhy.classList.toggle('hidden', palm);
-    if (palm) updateHandWhy(); else if (!tour.ms) updateFaceWhy('noface');
+    laying = true;
+    try { if (palm) updateHandWhy(); else if (!tour.ms) updateFaceWhy('noface'); } finally { laying = false; }
     const kindR = $('#cam-kind').getBoundingClientRect(), statusAtTop = statusR.height && statusR.top - stageR.top < sh / 3;
     const topEdge = Math.max(kindR.bottom, statusAtTop ? statusR.bottom : 0) - stageR.top + 8;
     card.style.top = `${topEdge}px`;
-    const room = Math.max(1, availB - availT), minKeep = Math.max(150, room * 0.6);   // 카드를 두고도 남겨야 하는 높이
+    const room = Math.max(1, availB - availT), minKeep = Math.max(palm ? 180 : 150, room * (palm ? 0.75 : 0.6));   // 카드를 두고도 남겨야 하는 높이
     const left = (h) => availB - Math.max(availT, topEdge + h + 8);
     card.classList.remove('compact', 'tight');
     if (left(card.getBoundingClientRect().height) < minKeep) {
@@ -415,6 +432,7 @@ function layoutCamera() {
       if (left(card.getBoundingClientRect().height) < minKeep) card.classList.add('tight');
     }
     if (!card.classList.contains('tight')) availT = Math.max(availT, topEdge + card.getBoundingClientRect().height + 8);
+    card._h = Math.round(card.getBoundingClientRect().height);
   }
   let oh = (availB - availT) * 0.84, ow = oh * 0.75;
   if (ow > (visR - visL) * 0.84) { ow = (visR - visL) * 0.84; oh = ow / 0.75; }
@@ -497,9 +515,9 @@ async function keepAwake(on) {
 }
 
 /** 관상(face) 또는 손금(palm) 촬영을 시작한다 */
-function startCapture(kind, { replace = false } = {}) {
+function startCapture(kind, { replace = false, keepFacing = false } = {}) {
   captureKind = kind;
-  facing = kind === 'palm' ? 'environment' : 'user';   // 손바닥은 화질이 좋은 뒷면 카메라가 기본
+  if (!keepFacing) facing = kind === 'palm' ? 'environment' : 'user';   // 손바닥은 화질이 좋은 뒷면 카메라가 기본
   if (!CAN_LIVE) { (kind === 'palm' ? palmCaptureInput : captureInput).click(); return; }
   show('camera', { history: replace ? 'replace' : 'push' });
   openCamera();
@@ -571,10 +589,12 @@ function liveLoop(now) {
     setLive('', '얼굴이 보이지 않습니다. 타원 안에 얼굴을 맞춰 주세요.');
     resetHold();
     if (!tour.lost) tour.lost = now;
-    if (now - tour.lost > 2000) { resetTour(); updateFaceWhy('noface'); }   // 잠깐 놓친 건 이어서, 2초 넘게 사라지면 처음부터
+    if (now - tour.lost > 2000) resetTour();   // 잠깐 놓친 건 이어서, 2초 넘게 사라지면 처음부터
+    if (!tour.ms) updateFaceWhy('noface');
     return;
   }
   tour.lost = 0;
+  if (faceWhy.classList.contains('tight')) tour.ms = Math.max(tour.ms, TOUR_TOTAL_MS);   // 카드가 숨겨진 좁은 화면에서는 안내 없이 바로 촬영 (설명 없는 강조·대기를 피한다)
   const pts = toPixels(lm, overlay.width, overlay.height);
   const feat = measure(pts);   // 3D 자세 보정 포함 (고개 각도 판정에도 사용)
   const check = frontalCheck(pts, feat.pose, res.faceBlendshapes?.[0]?.categories);
@@ -1268,12 +1288,17 @@ async function analyzePalmSnapshot({ history: histMode = 'push', seq = false } =
       return { lm, world, label: res.handednesses?.[i]?.[0]?.categoryName };
     }).filter(h => isPalmFacing(h.lm, h.label));
     if (!found.length) throw new Error('BACKHAND');
-    const bySide = new Map();   // 같은 쪽 손이 둘로 잡히면 더 크게 찍힌 쪽만 쓴다
     for (const h of found) {
       h.side = detectHandSide(h.lm);   // 사진 속 손이 왼손인지 오른손인지는 손가락 방향으로 알아낸다
       h.size = dist(h.lm[5], h.lm[17]);
-      if (!bySide.has(h.side) || bySide.get(h.side).size < h.size) bySide.set(h.side, h);
     }
+    // 배경의 다른 사람 손이나 잘못 잡힌 손은 걸러낸다: 가장 큰 손의 절반 남짓보다 작으면 버리고, 차례 촬영이면 지금 차례인 손만 쓴다
+    const biggest = Math.max(...found.map(h => h.size));
+    let cands = found.filter(h => h.size >= biggest * 0.55);
+    const want = seq ? seqSide() : null;
+    if (want && cands.some(h => h.side === want)) cands = cands.filter(h => h.side === want);
+    const bySide = new Map();   // 같은 쪽 손이 둘로 잡히면 더 크게 찍힌 쪽만 쓴다
+    for (const h of cands) if (!bySide.has(h.side) || bySide.get(h.side).size < h.size) bySide.set(h.side, h);
     await sleep(40);   // 안내 화면이 먼저 그려지게 한 번 양보
     const img = snapshot.getContext('2d').getImageData(0, 0, snapshot.width, snapshot.height);
     const src = document.createElement('canvas');   // 결과 화면에서 다시 그릴 수 있도록 사진을 따로 보관 (다른 손을 찍으면 snapshot 이 바뀐다)
@@ -1296,10 +1321,10 @@ async function analyzePalmSnapshot({ history: histMode = 'push', seq = false } =
     refreshFusion();
     renderHub();
     if (current !== 'analyzing') return;   // 분석 중 사용자가 뒤로 감
-    if (seq && seqStep === 0 && combo.palms.left && made.some(p => p.side === 'left')) {   // 선천(왼손)을 마쳤으니 이어서 후천(오른손)을 찍는다
+    if (seq && seqStep === 0 && combo.palms.left && made.some(p => p.side === 'left') && !made.some(p => p.side === 'right')) {   // 선천(왼손)을 마쳤으니 이어서 후천(오른손)을 찍는다
       seqStep = 1;
       showToast('왼손(선천)을 읽었어요. 이어서 오른손(후천)을 찍어 주세요.', 3600);
-      startCapture('palm', { replace: true });
+      startCapture('palm', { replace: true, keepFacing: true });   // 왼손에 쓴 카메라를 그대로 쓴다
       return;
     }
     backToHub();
@@ -1575,7 +1600,7 @@ handPick.addEventListener('click', () => {
 });
 handModeBtn.addEventListener('click', () => {
   handMode = { seq: 'both', both: 'one', one: 'seq' }[handMode];
-  seqStep = 0;
+  if (handMode === 'seq' && !combo.palms.left) seqStep = 0;   // 왼손을 아직 안 찍었으면 처음부터, 찍었으면 하던 차례 그대로
   try { localStorage.setItem('gwansang.hands', handMode); } catch { /* 무시 */ }
   palmStable.clear(); resetHold();
   layoutCamera();
