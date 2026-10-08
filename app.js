@@ -396,18 +396,26 @@ function layoutCamera() {
   const statusR = statusEl.getBoundingClientRect();
   // 안내 문구는 한 줄일 때도 두 줄일 때도 있으므로 실제 높이와 두 줄 높이 중 큰 쪽을 비워 둔다
   if (statusR.height && statusR.top - stageR.top < sh / 3) availT = Math.max(availT, statusR.bottom - stageR.top + 8, 70 + safeTop());
+  const ctrlR = camControls.getBoundingClientRect();
+  const ctrlOverlaps = ctrlR.top < stageR.bottom - 1 && ctrlR.bottom > stageR.top && ctrlR.left < stageR.right - 1 && ctrlR.right > stageR.left + 1;
+  if (ctrlOverlaps) availB = Math.min(availB, ctrlR.top - stageR.top - 8);
   {
+    // 설명 카드: 자리가 넉넉하면 전체를, 모자라면 제목 한 줄만, 그래도 모자라면 숨겨서 얼굴·손이 들어갈 자리를 지킨다 (가로 화면·작은 휴대폰)
     const palm = captureKind === 'palm', card = palm ? handWhy : faceWhy;
     handWhy.classList.toggle('hidden', !palm); faceWhy.classList.toggle('hidden', palm);
     if (palm) updateHandWhy(); else if (!tour.ms) updateFaceWhy('noface');
     const kindR = $('#cam-kind').getBoundingClientRect(), statusAtTop = statusR.height && statusR.top - stageR.top < sh / 3;
     const topEdge = Math.max(kindR.bottom, statusAtTop ? statusR.bottom : 0) - stageR.top + 8;
     card.style.top = `${topEdge}px`;
-    availT = Math.max(availT, topEdge + card.getBoundingClientRect().height + 8);
+    const room = Math.max(1, availB - availT), minKeep = Math.max(150, room * 0.6);   // 카드를 두고도 남겨야 하는 높이
+    const left = (h) => availB - Math.max(availT, topEdge + h + 8);
+    card.classList.remove('compact', 'tight');
+    if (left(card.getBoundingClientRect().height) < minKeep) {
+      card.classList.add('compact');
+      if (left(card.getBoundingClientRect().height) < minKeep) card.classList.add('tight');
+    }
+    if (!card.classList.contains('tight')) availT = Math.max(availT, topEdge + card.getBoundingClientRect().height + 8);
   }
-  const ctrlR = camControls.getBoundingClientRect();
-  const ctrlOverlaps = ctrlR.top < stageR.bottom - 1 && ctrlR.bottom > stageR.top && ctrlR.left < stageR.right - 1 && ctrlR.right > stageR.left + 1;
-  if (ctrlOverlaps) availB = Math.min(availB, ctrlR.top - stageR.top - 8);
   let oh = (availB - availT) * 0.84, ow = oh * 0.75;
   if (ow > (visR - visL) * 0.84) { ow = (visR - visL) * 0.84; oh = ow / 0.75; }
   const cx = (visL + visR) / 2, cy = (availT + availB) / 2;
@@ -439,7 +447,7 @@ function layoutHandGuide({ cx, cy, oh, availT, availB, sw }) {
   const flipFor = (side) => (side === 'right') === geo.mirrored;
   if (!isBoth()) {
     const side = handMode === 'seq' ? seqSide() : handSide;
-    const h = Math.max(40, Math.min(oh * 1.2, availB - availT, sw * 0.92 / ASPECT)), w = h * ASPECT;
+    const h = Math.max(40, Math.min(oh * 1.2, (availB - availT) * 0.94, sw * 0.92 / ASPECT)), w = h * ASPECT;   // 아래 가장자리에 붙지 않게 조금 남긴다
     const top = clamp(cy - h / 2, availT, Math.max(availT, availB - h));
     Object.assign(handGuide.style, { left: `${cx - w / 2}px`, top: `${top}px`, width: `${w}px`, height: `${h}px` });
     handGuide.classList.toggle('flip', flipFor(side));
