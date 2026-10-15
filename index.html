@@ -63,7 +63,7 @@
             <h3>손금 <small>手 · 손바닥</small></h3>
             <p class="step-desc">먼저 <b>선천(타고난 바탕)</b>을 보는 왼손, 이어서 <b>후천(살아오며 다듬은 모습)</b>을 보는 오른손을 차례로 찍어요. 손가락을 펴고 밝은 곳에서 찍어 주세요.</p>
             <p id="hub-palm-status" class="step-status"></p>
-            <div class="step-btns"><button id="hub-palm-cam" class="primary sm" type="button">📷 촬영</button><button id="hub-palm-up" class="ghost sm" type="button">🖼 사진</button><button id="hub-palm-view" class="ghost sm hidden" type="button">결과 보기</button></div>
+            <div class="step-btns"><button id="hub-palm-cam" class="primary sm" type="button">📷 촬영</button><button id="hub-palm-other" class="ghost sm hidden" type="button"></button><button id="hub-palm-up" class="ghost sm" type="button">🖼 사진</button><button id="hub-palm-view" class="ghost sm hidden" type="button">결과 보기</button></div>
           </div>
         </article>
         <article class="step" id="step-saju">
@@ -135,8 +135,8 @@
         </div>
         <div id="oval" class="oval" aria-hidden="true"></div>
         <svg id="hand-guide" class="hand-guide hidden" viewBox="0 0 200 280" aria-hidden="true"><path d="M72 278 L72 246 C54 234 45 212 45 182 L45 100 A10.5 10.5 0 0 1 66 100 L66 150 L69 150 L69 64 A11 11 0 0 1 91 64 L91 146 L94 146 L94 44 A12 12 0 0 1 118 44 L118 146 L121 146 L121 68 A11 11 0 0 1 143 68 L143 150 L156 168 L172 130 A10 10 0 0 1 190 140 L162 214 C160 236 148 246 134 252 L128 278 Z"/><path class="crease" d="M58 168 C80 176 104 172 128 160"/><path class="crease" d="M60 196 C80 204 100 204 118 198"/></svg>
-        <div id="face-why" class="face-why hidden">
-          <div class="hw-top"><b id="fw-badge" class="hw-badge"></b><span id="fw-dots" class="fw-dots" aria-hidden="true"></span></div>
+        <div id="face-why" class="face-why hidden" role="status" aria-live="polite" aria-atomic="false">
+          <div class="hw-top"><b id="fw-badge" class="hw-badge"></b><span class="fw-right"><span id="fw-dots" class="fw-dots" aria-hidden="true"></span><button id="fw-skip" class="fw-skip" type="button">건너뛰기</button></span></div>
           <p id="fw-text" class="hw-text"></p>
         </div>
         <div id="hand-why" class="hand-why hidden">
